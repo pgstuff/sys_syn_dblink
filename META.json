@@ -1,0 +1,25 @@
+{
+    "name": "sys_syn_dblink",
+    "abstract": "System Synchronization Reader - dblink",
+    "description": "A sys_syn dblink.",
+    "version": "0.0.1",
+    "maintainer": "The maintainer's name",
+    "license": "postgresql",
+    "provides": {
+        "sys_syn_dblink": {
+            "abstract": "A sys_syn dblink.",
+            "file": "sql/sys_syn_dblink.sql",
+            "docfile": "doc/sys_syn_dblink.md",
+            "version": "0.0.1"
+        }
+    },
+    "release_status": "unstable",
+
+    "generated_by": "The maintainer's name",
+
+
+    "meta-spec": {
+        "version": "1.0.0",
+        "url": "http://pgxn.org/meta/spec.txt"
+    }
+}

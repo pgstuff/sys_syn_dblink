@@ -1,0 +1,9 @@
+BEGIN;
+
+CREATE EXTENSION sys_syn;
+
+CREATE EXTENSION dblink;
+
+CREATE EXTENSION sys_syn_dblink;
+
+ROLLBACK;

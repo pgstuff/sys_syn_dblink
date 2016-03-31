@@ -1,0 +1,30 @@
+BEGIN;
+CREATE EXTENSION sys_syn_dblink;
+CREATE SCHEMA reader_data
+        AUTHORIZATION postgres;
+SELECT dblink_connect('sys_syn_test', 'dbname=contrib_regression');
+ dblink_connect 
+----------------
+ OK
+(1 row)
+
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
+SELECT sys_syn_dblink.reading_table_add (
+        schema          => 'reader_data',
+        in_table_id     => 'test_table',
+        out_group_id    => 'out',
+        in_group_id     => 'in',
+        dblink_connname => 'sys_syn_test');
+ reading_table_add 
+-------------------
+ 
+(1 row)
+
+SELECT dblink_disconnect('sys_syn_test');
+ dblink_disconnect 
+-------------------
+ OK
+(1 row)
+
+ROLLBACK;

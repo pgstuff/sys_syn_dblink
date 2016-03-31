@@ -1,0 +1,97 @@
+BEGIN;
+CREATE EXTENSION sys_syn_dblink;
+CREATE SCHEMA reader_data
+        AUTHORIZATION postgres;
+CREATE SCHEMA put_data
+        AUTHORIZATION postgres;
+SELECT dblink_connect('sys_syn_test', 'dbname=contrib_regression');
+ dblink_connect 
+----------------
+ OK
+(1 row)
+
+SELECT dblink_exec('sys_syn_test', 'BEGIN');
+ dblink_exec 
+-------------
+ BEGIN
+(1 row)
+
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
+SELECT sys_syn_dblink.reading_table_add (
+        schema          => 'reader_data',
+        in_table_id     => 'test_table',
+        out_group_id    => 'out',
+        in_group_id     => 'in',
+        put_schema      => 'put_data',
+        table_type_id   => 'sys_syn-direct',
+        dblink_connname => 'sys_syn_test');
+ reading_table_add 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM reader_data.test_table_out_claim();
+ test_table_out_claim 
+----------------------
+ t
+(1 row)
+
+SELECT * FROM reader_data.test_table_out_pull();
+ test_table_out_pull 
+---------------------
+ t
+(1 row)
+
+SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, key, attributes, no_diff
+FROM    reader_data.test_table_out_reading
+ORDER BY key, attributes;
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | key |   attributes    | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------+---------
+           2 | Add        |                |              |                         |                      |                        | (1) | ("test_data 1") | 
+           2 | Add        |                |              |                         |                      |                        | (2) | ("test_data 2") | 
+           2 | Add        |                |              |                         |                      |                        | (3) | ("test_data 3") | 
+(3 rows)
+
+SELECT * FROM reader_data.test_table_out_process();
+ test_table_out_process 
+------------------------
+ t
+(1 row)
+
+SELECT  *
+FROM    put_data.test_table_out
+ORDER BY test_table_key, test_table_text;
+ test_table_key | test_table_text 
+----------------+-----------------
+              1 | test_data 1
+              2 | test_data 2
+              3 | test_data 3
+(3 rows)
+
+SELECT  *
+FROM    reader_data.test_table_out_hold
+ORDER BY key, attributes;
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | key | attributes | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+------------+---------
+(0 rows)
+
+SELECT * FROM reader_data.test_table_out_push_status();
+ test_table_out_push_status 
+----------------------------
+ t
+(1 row)
+
+SELECT dblink_exec('sys_syn_test', 'ROLLBACK');
+ dblink_exec 
+-------------
+ ROLLBACK
+(1 row)
+
+SELECT dblink_disconnect('sys_syn_test');
+ dblink_disconnect 
+-------------------
+ OK
+(1 row)
+
+ROLLBACK;

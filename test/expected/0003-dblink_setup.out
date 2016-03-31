@@ -1,0 +1,17 @@
+BEGIN;
+CREATE EXTENSION sys_syn;
+CREATE EXTENSION dblink;
+CREATE EXTENSION sys_syn_dblink;
+SELECT dblink_connect('sys_syn_dblink_test', 'dbname=contrib_regression');
+ dblink_connect 
+----------------
+ OK
+(1 row)
+
+SELECT dblink_disconnect('sys_syn_dblink_test');
+ dblink_disconnect 
+-------------------
+ OK
+(1 row)
+
+ROLLBACK;

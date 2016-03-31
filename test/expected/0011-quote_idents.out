@@ -1,0 +1,66 @@
+BEGIN;
+CREATE EXTENSION sys_syn_dblink;
+CREATE SCHEMA "Reader Schema"
+        AUTHORIZATION postgres;
+SELECT dblink_connect('SysSyn Data', 'dbname=contrib_regression');
+ dblink_connect 
+----------------
+ OK
+(1 row)
+
+SELECT dblink_exec('SysSyn Data', 'BEGIN');
+ dblink_exec 
+-------------
+ BEGIN
+(1 row)
+
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('In Group');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('Out Group');
+SELECT sys_syn_dblink.reading_table_add (
+        schema          => 'Reader Schema',
+        in_table_id     => 'Test Table',
+        out_group_id    => 'Out Group',
+        in_group_id     => 'In Group',
+        dblink_connname => 'SysSyn Data');
+ reading_table_add 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM "Reader Schema"."Test Table_Out Group_claim"();
+ Test Table_Out Group_claim 
+----------------------------
+ t
+(1 row)
+
+SELECT * FROM "Reader Schema"."Test Table_Out Group_pull"();
+ Test Table_Out Group_pull 
+---------------------------
+ t
+(1 row)
+
+SELECT * FROM "Reader Schema"."Test Table_Out Group_process"();
+ Test Table_Out Group_process 
+------------------------------
+ t
+(1 row)
+
+SELECT * FROM "Reader Schema"."Test Table_Out Group_push_status"();
+ Test Table_Out Group_push_status 
+----------------------------------
+ t
+(1 row)
+
+SELECT dblink_exec('SysSyn Data', 'ROLLBACK');
+ dblink_exec 
+-------------
+ ROLLBACK
+(1 row)
+
+SELECT dblink_disconnect('SysSyn Data');
+ dblink_disconnect 
+-------------------
+ OK
+(1 row)
+
+ROLLBACK;

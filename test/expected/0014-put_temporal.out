@@ -1,0 +1,128 @@
+BEGIN;
+CREATE EXTENSION sys_syn_dblink;
+CREATE EXTENSION temporal_tables;
+CREATE EXTENSION btree_gist;
+/*INSERT INTO sys_syn_dblink.put_column_transforms(
+        rule_group_id,  priority,       data_type_like,
+        in_table_id_like,       out_group_id_like,      in_group_id_like,
+        schema_like,    in_column_type,                         column_name_like,
+        new_data_type,  new_in_column_type,                     new_column_name,
+        expression,
+        create_put_columns,
+        omit,   final_ids,                      final_rule)
+VALUES (NULL,           100,            NULL,
+        'test_table_array',     NULL,                   NULL,
+        NULL,           NULL,                                   'test_table_array_updated',
+        'tstzrange',    NULL,                                   NULL,
+        'tstzrange(%1, null)',
+        NULL,
+        NULL,   ARRAY[]::TEXT[],                FALSE);*/
+CREATE SCHEMA reader_data
+        AUTHORIZATION postgres;
+CREATE SCHEMA put_data
+        AUTHORIZATION postgres;
+SELECT dblink_connect('sys_syn_test', 'dbname=contrib_regression');
+ dblink_connect 
+----------------
+ OK
+(1 row)
+
+SELECT dblink_exec('sys_syn_test', 'BEGIN');
+ dblink_exec 
+-------------
+ BEGIN
+(1 row)
+
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
+SELECT sys_syn_dblink.reading_table_add (
+        schema          => 'reader_data',
+        in_table_id     => 'test_table_array',
+        out_group_id    => 'out',
+        in_group_id     => 'in',
+        put_schema      => 'put_data',
+        table_type_id   => 'sys_syn-temporal',
+        dblink_connname => 'sys_syn_test');
+ reading_table_add 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM reader_data.test_table_array_out_claim();
+ test_table_array_out_claim 
+----------------------------
+ t
+(1 row)
+
+SELECT * FROM reader_data.test_table_array_out_pull();
+ test_table_array_out_pull 
+---------------------------
+ t
+(1 row)
+
+SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, key, attributes, no_diff
+FROM    reader_data.test_table_array_out_reading
+ORDER BY key, attributes;
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | key |                                                  attributes                                                   | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+---------------------------------------------------------------------------------------------------------------+---------
+          27 | Add        |                |              |                         |                      |                        | (1) | {"(\"Thu Jan 01 19:04:05 2009 PST\",\"test_data v1\")","(\"Fri Jan 01 19:04:05 2010 PST\",\"test_data v2\")"} | 
+(1 row)
+
+SELECT * FROM reader_data.test_table_array_out_process();
+ test_table_array_out_process 
+------------------------------
+ t
+(1 row)
+
+SELECT  test_table_array_key, test_table_array_updated, test_table_array_text
+FROM    put_data.test_table_array_out
+ORDER BY test_table_array_key, test_table_array_text;
+ test_table_array_key |     test_table_array_updated      | test_table_array_text 
+----------------------+-----------------------------------+-----------------------
+                    1 | ["Fri Jan 01 19:04:05 2010 PST",) | test_data v2
+(1 row)
+
+SELECT  test_table_array_key, test_table_array_updated, test_table_array_text
+FROM    put_data.test_table_array_out_history
+ORDER BY test_table_array_key, test_table_array_text;
+ test_table_array_key |                    test_table_array_updated                     | test_table_array_text 
+----------------------+------------------------------+-----------------------
+                    1 | ["Thu Jan 01 19:04:05 2009 PST","Fri Jan 01 19:04:05 2010 PST") | test_data v1
+                    1 | ["Fri Jan 01 19:04:05 2010 PST",) | test_data v2
+(2 rows)
+
+
+SELECT  hold_reason_id, hold_reason_text, queue_priority
+FROM    reader_data.test_table_array_out_read
+ORDER BY reading_key;
+ hold_reason_id | hold_reason_text | queue_priority 
+----------------+------------------+----------------
+                |                  |               
+(1 row)
+
+SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, key, attributes, no_diff
+FROM    reader_data.test_table_array_out_hold
+ORDER BY key, attributes;
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | key | attributes | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+------------+---------
+(0 rows)
+
+SELECT * FROM reader_data.test_table_array_out_push_status();
+ test_table_array_out_push_status 
+----------------------------------
+ t
+(1 row)
+
+SELECT dblink_exec('sys_syn_test', 'ROLLBACK');
+ dblink_exec 
+-------------
+ ROLLBACK
+(1 row)
+
+SELECT dblink_disconnect('sys_syn_test');
+ dblink_disconnect 
+-------------------
+ OK
+(1 row)
+
+ROLLBACK;

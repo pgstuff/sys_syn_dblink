@@ -1,0 +1,5 @@
+# sys_syn_dblink extension
+comment = 'System Synchronization Reader - dblink'
+default_version = '0.0.1'
+relocatable = false
+requires = 'plpgsql, dblink'
