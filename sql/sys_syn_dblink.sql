@@ -246,6 +246,8 @@ END
 $BODY$
   LANGUAGE plpgsql STABLE
   COST 10;
+ALTER FUNCTION sys_syn_dblink.table_primary_key_name(regnamespace, text) OWNER TO postgres;
+
 
 CREATE FUNCTION sys_syn_dblink.read_columns_get (
         in_table_id text,
@@ -279,13 +281,13 @@ BEGIN
         _column_type_attr_name  := _reading_table_def.in_table_id||'_'||_reading_table_def.out_group_id||'_reading_attributes';
         _column_type_nodif_name := _reading_table_def.in_table_id||'_'||_reading_table_def.out_group_id||'_reading_attributes';
 
-        _return_columns     := ARRAY[]::sys_syn_dblink.create_read_column[];
+        _return_columns         := ARRAY[]::sys_syn_dblink.create_read_column[];
 
         IF (    SELECT  COUNT(*)
                 FROM    pg_catalog.pg_namespace JOIN
                         pg_catalog.pg_class ON
                                 pg_class.relnamespace = pg_namespace.oid
-                WHERE   pg_namespace.nspname = _reading_table_def.schema::text AND
+                WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _reading_table_def.schema AND
                         pg_class.relname = _column_type_key_name) = 0 THEN
                 RAISE EXCEPTION 'Cannot find type ''%''.''%''.', _reading_table_def.schema::text, _column_type_key_name
                 USING HINT = 'Check the schema and table names.';
@@ -304,7 +306,7 @@ BEGIN
                         pg_class.relnamespace = pg_namespace.oid JOIN
                 pg_catalog.pg_attribute ON
                         (pg_attribute.attrelid = pg_class.oid)
-        WHERE   pg_namespace.nspname = _reading_table_def.schema::text AND
+        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _reading_table_def.schema AND
                 pg_class.relname IN (_column_type_key_name, _column_type_attr_name, _column_type_nodif_name) AND
                 pg_attribute.attnum > 0 AND
                 NOT pg_attribute.attisdropped
@@ -316,6 +318,7 @@ BEGIN
                 END,
                 pg_attribute.attnum
         LOOP
+
                 _return_column.column_name          := _column_name;
                 _return_column.data_type            := _format_type;
                 _return_column.in_column_type       := _in_column_type;
@@ -413,13 +416,13 @@ BEGIN
         _column_type_attr_name  := _reading_table_def.in_table_id||'_'||_reading_table_def.out_group_id||'_reading_attributes';
         _column_type_nodif_name := _reading_table_def.in_table_id||'_'||_reading_table_def.out_group_id||'_reading_attributes';
 
-        _return_columns     := ARRAY[]::sys_syn_dblink.create_put_column[];
+        _return_columns         := ARRAY[]::sys_syn_dblink.create_put_column[];
 
         IF (    SELECT  COUNT(*)
                 FROM    pg_catalog.pg_namespace JOIN
                         pg_catalog.pg_class ON
                                 pg_class.relnamespace = pg_namespace.oid
-                WHERE   pg_namespace.nspname = _reading_table_def.schema::text AND
+                WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _reading_table_def.schema AND
                         pg_class.relname = _column_type_key_name) = 0 THEN
                 RAISE EXCEPTION 'Cannot find type ''%''.''%''.', _reading_table_def.schema::text, _column_type_key_name
                 USING HINT = 'Check the schema and table names.';
@@ -438,7 +441,7 @@ BEGIN
                         pg_class.relnamespace = pg_namespace.oid JOIN
                 pg_catalog.pg_attribute ON
                         (pg_attribute.attrelid = pg_class.oid)
-        WHERE   pg_namespace.nspname = _reading_table_def.schema::text AND
+        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _reading_table_def.schema AND
                 pg_class.relname IN (_column_type_key_name, _column_type_attr_name, _column_type_nodif_name) AND
                 pg_attribute.attnum > 0 AND
                 NOT pg_attribute.attisdropped
@@ -618,7 +621,7 @@ BEGIN
                         pg_class.relnamespace = pg_namespace.oid JOIN
                 pg_catalog.pg_attribute ON
                         (pg_attribute.attrelid = pg_class.oid)
-        WHERE   pg_namespace.nspname = _reading_table_def.schema::text AND
+        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _reading_table_def.schema AND
                 pg_class.relname = _in_column_type_name AND
                 pg_attribute.attnum > 0 AND
                 NOT pg_attribute.attisdropped
@@ -654,7 +657,7 @@ CREATE FUNCTION sys_syn_dblink.read_columns_format (
 $BODY$
 DECLARE
         _column     sys_syn_dblink.create_read_column;
-        _sql_buffer     TEXT := '';
+        _sql_buffer TEXT := '';
 BEGIN
         IF format_text IS NULL THEN
                 RAISE EXCEPTION 'sys_syn_dblink.format_text cannot be null.';
@@ -785,12 +788,17 @@ BEGIN
                 hold_cache_min_rows,                    remote_status_batch_rows)
         SELECT  reading_table_add.schema,               reading_table_add.in_table_id,
                 reading_table_add.out_group_id,         reading_table_add.in_group_id,
-                COALESCE(reading_table_add.put_schema, reading_table_add.schema),
+                COALESCE(reading_table_add.put_schema,  reading_table_add.schema),
                 reading_table_add.table_type_id,        in_tables_def.attributes_array,
                 reading_table_add.dblink_connname,      in_tables_def.schema_name,
                 reading_table_add.hold_cache_min_rows,  reading_table_add.remote_status_batch_rows
         FROM    dblink(dblink_connname, $$
-                        SELECT  in_tables_def.attributes_array, in_tables_def.schema::text AS schema_name
+                        SELECT  in_tables_def.attributes_array,
+                                CASE WHEN SUBSTRING(in_tables_def.schema::text, 1, 1) = '"' THEN
+                                        replace(
+                                            SUBSTRING(in_tables_def.schema::text, 2, LENGTH(in_tables_def.schema::text) - 2),
+                                            '""', '"')
+                                        ELSE in_tables_def.schema::text END AS schema_name
                         FROM    sys_syn.in_tables_def
                         WHERE   in_tables_def.in_table_id = $$||quote_literal(reading_table_add.in_table_id)||$$
                 $$) AS in_tables_def(attributes_array boolean, schema_name text);
@@ -850,7 +858,7 @@ BEGIN
         FROM    out_queue_data_view_columns_temp AS view_columns
         ORDER BY view_columns.column_ordinal;
 
-        _sql_buffer := 'CREATE TYPE ' || quote_ident(schema::text) || '.' || quote_ident(_type_key_name) || ' AS (';
+        _sql_buffer := 'CREATE TYPE ' || schema::text || '.' || quote_ident(_type_key_name) || ' AS (';
         _sql_delimit := FALSE;
         FOR     _column_name IN
         SELECT  column_name
@@ -878,7 +886,7 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TYPE ' || quote_ident(schema::text) || '.' || quote_ident(_type_attributes_name) || ' AS (';
+        _sql_buffer := 'CREATE TYPE ' || schema::text || '.' || quote_ident(_type_attributes_name) || ' AS (';
         _sql_delimit := FALSE;
         FOR     _column_name IN
         SELECT  column_name
@@ -903,7 +911,7 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TYPE ' || quote_ident(schema::text) || '.' || quote_ident(_type_no_diff_name) || ' AS (';
+        _sql_buffer := 'CREATE TYPE ' || schema::text || '.' || quote_ident(_type_no_diff_name) || ' AS (';
         _sql_delimit := FALSE;
         FOR     _column_name IN
         SELECT  column_name
@@ -928,8 +936,9 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE UNLOGGED TABLE ' || quote_ident(schema::text) || '.' ||
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || schema::text || '.' ||
                 quote_ident(in_table_id||'_'||out_group_id||'_reading') || ' (
+        key ' || schema::text || '.' || quote_ident(_type_key_name) || ' NOT NULL,
         trans_id_in             integer NOT NULL,
         delta_type              sys_syn_dblink.delta_type NOT NULL,
         queue_priority          smallint,
@@ -937,30 +946,29 @@ BEGIN
         prior_hold_reason_count integer,
         prior_hold_reason_id    integer,
         prior_hold_reason_text  text,
-        reading_key             tid NOT NULL,
-        key ' || quote_ident(schema::text) || '.' || quote_ident(_type_key_name) || ' NOT NULL,
-        attributes ' || quote_ident(schema::text) || '.' || quote_ident(_type_attributes_name) ||
+        attributes ' || schema::text || '.' || quote_ident(_type_attributes_name) ||
         CASE WHEN _reading_table_def.attributes_array THEN '[]' ELSE '' END || ',
-        no_diff ' || quote_ident(schema::text) || '.' || quote_ident(_type_no_diff_name) || ',
-        CONSTRAINT ' || quote_ident(in_table_id||'_'||out_group_id||'_reading_pkey') || ' PRIMARY KEY (reading_key)
+        no_diff ' || schema::text || '.' || quote_ident(_type_no_diff_name) || ',
+        CONSTRAINT ' || quote_ident(in_table_id||'_'||out_group_id||'_reading_pkey') || ' PRIMARY KEY (key)
 )';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE UNLOGGED TABLE ' || quote_ident(schema::text) || '.' ||
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || schema::text || '.' ||
                 quote_ident(in_table_id||'_'||out_group_id||'_read') || ' (
-        reading_key             tid NOT NULL,
+        key ' || schema::text || '.' || quote_ident(_type_key_name) || ' NOT NULL,
         hold_reason_id          integer,
         hold_reason_text        text,
         queue_priority          smallint,
         processed_time          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT ' || quote_ident(in_table_id||'_'||out_group_id||'_read_pkey') || ' PRIMARY KEY (reading_key)
+        CONSTRAINT ' || quote_ident(in_table_id||'_'||out_group_id||'_read_pkey') || ' PRIMARY KEY (key)
 )';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TABLE ' || quote_ident(schema::text) || '.' ||
+        _sql_buffer := 'CREATE TABLE ' || schema::text || '.' ||
                 quote_ident(in_table_id||'_'||out_group_id||'_hold') || ' (
+        key ' || schema::text || '.' || quote_ident(_type_key_name) || ' NOT NULL,
         trans_id_in             integer NOT NULL,
         delta_type              sys_syn_dblink.delta_type NOT NULL,
         queue_priority          smallint,
@@ -968,29 +976,28 @@ BEGIN
         prior_hold_reason_count integer,
         prior_hold_reason_id    integer,
         prior_hold_reason_text  text,
-        key ' || quote_ident(schema::text) || '.' || quote_ident(_type_key_name) || ' NOT NULL,
-        attributes ' || quote_ident(schema::text) || '.' || quote_ident(_type_attributes_name) ||
+        attributes ' || schema::text || '.' || quote_ident(_type_attributes_name) ||
         CASE WHEN _reading_table_def.attributes_array THEN '[]' ELSE '' END || ',
-        no_diff ' || quote_ident(schema::text) || '.' || quote_ident(_type_no_diff_name) || ',
+        no_diff ' || schema::text || '.' || quote_ident(_type_no_diff_name) || ',
         CONSTRAINT ' || quote_ident(in_table_id||'_'||out_group_id||'_hold_pkey') || ' PRIMARY KEY (key)
 )';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TABLE ' || quote_ident(schema::text) || '.' ||
+        _sql_buffer := 'CREATE TABLE ' || schema::text || '.' ||
                 quote_ident(in_table_id||'_'||out_group_id||'_queue_status') || ' (
         queue_id smallint DEFAULT NULL)';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
         _sql_buffer := 'CREATE UNIQUE INDEX ' || quote_ident(in_table_id||'_'||out_group_id||'_queue_status_1_row_idx') || '
-        ON ' || quote_ident(schema::text) || '.' || quote_ident(in_table_id||'_'||out_group_id||'_queue_status') || '
+        ON ' || schema::text || '.' || quote_ident(in_table_id||'_'||out_group_id||'_queue_status') || '
         USING btree
         ((true));';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'INSERT INTO ' || quote_ident(schema::text) || '.' ||
+        _sql_buffer := 'INSERT INTO ' || schema::text || '.' ||
                 quote_ident(in_table_id||'_'||out_group_id||'_queue_status') || ' DEFAULT VALUES';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
@@ -1068,7 +1075,7 @@ BEGIN
         FROM    unnest(_columns_put) AS put_columns
         WHERE   put_columns.in_column_type = 'NoDiff'::sys_syn_dblink.in_column_type;
 
-        EXECUTE 'SELECT '||quote_ident(_table_type_def.schema::text)||'.'||quote_ident(_table_type_def.table_create_proc_name)||
+        EXECUTE 'SELECT '||_table_type_def.schema::text||'.'||quote_ident(_table_type_def.table_create_proc_name)||
                 '($1, $2, $3, $4, $5, $6, $7, $8)'
         INTO    _sql_buffer
         USING   _reading_table_def.put_schema::text,    _reading_table_def.in_table_id,         _reading_table_def.out_group_id,
@@ -1128,7 +1135,7 @@ $BODY$
 DECLARE
         _sql  text;
 BEGIN
-        EXECUTE 'SELECT '||quote_ident(table_type_def.schema::text)||'.'||quote_ident(table_type_def.table_create_proc_name)||
+        EXECUTE 'SELECT '||table_type_def.schema::text||'.'||quote_ident(table_type_def.table_create_proc_name)||
         '($1, $2, $3)'
         INTO    _sql
         USING   reading_table_def.schema::text,
@@ -1136,7 +1143,7 @@ BEGIN
                 reading_table_def.out_group_id;
         EXECUTE _sql;
 
-        EXECUTE 'SELECT '||quote_ident(table_type_def.schema::text)||'.'||quote_ident(table_type_def.put_sql_proc_name)||
+        EXECUTE 'SELECT '||table_type_def.schema::text||'.'||quote_ident(table_type_def.put_sql_proc_name)||
         '($1, $2, $3)'
         INTO    _sql
         USING   reading_table_def.schema::text,
@@ -1167,7 +1174,7 @@ DECLARE
         _sql_buffer             TEXT;
 BEGIN
         _name_table := in_table_id||'_'||out_group_id;
-        _name_table_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table);
+        _name_table_sql := schema_name::text || '.' || quote_ident(_name_table);
 
         _sql_buffer := $$CREATE TABLE $$||_name_table_sql||$$ (
         $$||sys_syn_dblink.put_columns_format(columns_key, '%COLUMN_NAME% %FORMAT_TYPE%,
@@ -1208,7 +1215,7 @@ DECLARE
         _put_code_sql           sys_syn_dblink.put_code_sql;
 BEGIN
         _name_table := in_table_id||'_'||out_group_id;
-        _name_table_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table);
+        _name_table_sql := schema_name::text || '.' || quote_ident(_name_table);
 
         _put_code_sql.declarations_sql := '';
         _put_code_sql.logic_sql := $$        IF delta_type = 'Delete'::sys_syn_dblink.delta_type THEN
@@ -1264,7 +1271,7 @@ DECLARE
         _sql_buffer             TEXT;
 BEGIN
         _name_table := in_table_id||'_'||out_group_id;
-        _name_table_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table);
+        _name_table_sql := schema_name::text || '.' || quote_ident(_name_table);
 
         _columns_primary_key := columns_key || sys_syn_dblink.array_order_columns_get(columns_attribute);
 
@@ -1306,7 +1313,7 @@ DECLARE
         _put_code_sql           sys_syn_dblink.put_code_sql;
 BEGIN
         _name_table := in_table_id||'_'||out_group_id;
-        _name_table_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table);
+        _name_table_sql := schema_name::text || '.' || quote_ident(_name_table);
 
         _put_code_sql.declarations_sql := '';
         _put_code_sql.logic_sql := $$
@@ -1358,9 +1365,9 @@ DECLARE
         _sql_buffer             TEXT;
 BEGIN
         _name_table := in_table_id||'_'||out_group_id;
-        _name_table_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table);
+        _name_table_sql := schema_name::text || '.' || quote_ident(_name_table);
         _name_table_history := _name_table||'_history';
-        _name_table_history_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table_history);
+        _name_table_history_sql := schema_name::text || '.' || quote_ident(_name_table_history);
 
         IF array_length(columns_attribute_orderby, 1) != 1 THEN
                 RAISE EXCEPTION
@@ -1418,11 +1425,6 @@ CREATE SEQUENCE $$||_name_seq_sql||$$
 
 ALTER TABLE $$||_name_table_sql||$$
         ALTER COLUMN id SET DEFAULT nextval('$$||_name_seq_sql||$$'::regclass);
-
-
-ALTER TABLE public.$$||_name_table_sql||$$
-        ADD PRIMARY KEY (id);
-
 */
 
         RETURN _sql_buffer;
@@ -1453,44 +1455,59 @@ $BODY$
 DECLARE
         _name_table             TEXT;
         _name_table_sql         TEXT;
+        _name_table_history_sql TEXT;
         _put_code_sql           sys_syn_dblink.put_code_sql;
+        _array_index            INTEGER;
 BEGIN
         _name_table := in_table_id||'_'||out_group_id;
-        _name_table_sql := quote_ident(schema_name) || '.' || quote_ident(_name_table);
+        _name_table_sql := schema_name::text || '.' || quote_ident(_name_table);
+        _name_table_history_sql := schema_name::text || '.' || quote_ident(_name_table || '_history');
 
         _put_code_sql.declarations_sql := $$
         attribute_rows $$||quote_ident(schema_read_name)||'.'||quote_ident(type_attributes_name)||$$;
-        _first_row boolean := TRUE;
+        _system_time            timestamp with time zone;
+        _system_time_future     timestamp with time zone;
 $$;
         _put_code_sql.logic_sql := $$
-        DELETE FROM $$||_name_table_sql||$$ AS out_table
+        DELETE FROM $$||_name_table_history_sql||$$ AS out_table
         WHERE   $$||sys_syn_dblink.put_columns_format(columns_key,
         'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
                 ')||$$;
         IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
-                FOREACH attribute_rows IN ARRAY attributes LOOP
-                        PERFORM set_system_time($$||columns_attribute_orderby[1].value_expression||$$);
+                attribute_rows := attributes[array_length(attributes, 1)];
+                _system_time := $$||columns_attribute_orderby[1].value_expression||$$;
 
-                        IF _first_row THEN
-                                INSERT INTO $$||_name_table_sql||$$ AS out_table (
-                                        $$||sys_syn_dblink.put_columns_format(columns_key, '%COLUMN_NAME%', ',
-                                        ')||sys_syn_dblink.put_columns_format(columns_attribute_unordered, ',
-                                        %COLUMN_NAME%', '')||$$)
-                                SELECT  $$||sys_syn_dblink.put_columns_format(columns_key, '%VALUE_EXPRESSION%', ',
-                                        ')||sys_syn_dblink.put_columns_format(columns_attribute_unordered, ',
-                                        %VALUE_EXPRESSION%', '')||$$;
+                PERFORM set_system_time(_system_time);
 
-                                _first_row := FALSE;
-                        ELSE
-                                UPDATE  $$||_name_table_sql||$$ AS out_table
-                                SET     $$||sys_syn_dblink.put_columns_format(columns_attribute_unordered,
-                                                '%COLUMN_NAME% = %VALUE_EXPRESSION%', ',
-                                        ')||$$
-                                WHERE   $$||sys_syn_dblink.put_columns_format(columns_key,
-                                'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                                        ')||$$;
+                INSERT INTO $$||_name_table_sql||$$ AS out_table (
+                        $$||sys_syn_dblink.put_columns_format(columns_key, '%COLUMN_NAME%', ',
+                        ')||sys_syn_dblink.put_columns_format(columns_attribute_unordered, ',
+                        %COLUMN_NAME%', '')||$$)
+                SELECT  $$||sys_syn_dblink.put_columns_format(columns_key, '%VALUE_EXPRESSION%', ',
+                        ')||sys_syn_dblink.put_columns_format(columns_attribute_unordered, ',
+                        %VALUE_EXPRESSION%', '')||$$;
+
+                FOR _array_index IN REVERSE array_length(attributes, 1) - 1..1 LOOP
+                        _system_time_future     := _system_time;
+                        attribute_rows          := attributes[_array_index];
+                        _system_time            := $$||columns_attribute_orderby[1].value_expression||$$;
+
+                        IF _system_time >= _system_time_future THEN
+                                RAISE EXCEPTION 'The system time value is not equal to the next record.'
+                                USING HINT = 'Fix the data so that every record has a unique system time value.';
                         END IF;
+
+                        INSERT INTO $$||_name_table_history_sql||$$ AS out_table (
+                                $$||sys_syn_dblink.put_columns_format(columns_key, '%COLUMN_NAME%,
+                                ', '')||columns_attribute_orderby[1].column_name||
+                                sys_syn_dblink.put_columns_format(columns_attribute_unordered, ',
+                                %COLUMN_NAME%', '')||$$)
+                        SELECT  $$||sys_syn_dblink.put_columns_format(columns_key, '%VALUE_EXPRESSION%,
+                                ', '')||$$tstzrange(_system_time, _system_time_future)$$||
+                                sys_syn_dblink.put_columns_format(columns_attribute_unordered, ',
+                                %VALUE_EXPRESSION%', '')||$$;
                 END LOOP;
+
                 PERFORM set_system_time(NULL);
         END IF;$$;
 
@@ -1505,6 +1522,34 @@ ALTER FUNCTION sys_syn_dblink.put_sql_temporal(text, text, text, sys_syn_dblink.
   OWNER TO postgres;
 
 -- end
+
+
+CREATE OR REPLACE FUNCTION sys_syn_dblink.column_type_value_row(
+        in_table_id text,
+        out_group_id text,
+        value_expression text) RETURNS text
+        AS $BODY$
+DECLARE
+        _reading_table_def      sys_syn_dblink.reading_tables_def;
+BEGIN
+        _reading_table_def := (
+                SELECT  reading_tables_def
+                FROM    sys_syn_dblink.reading_tables_def
+                WHERE   reading_tables_def.in_table_id   = column_type_value_row.in_table_id AND
+                        reading_tables_def.out_group_id  = column_type_value_row.out_group_id);
+
+        IF _reading_table_def IS NULL THEN
+                RAISE EXCEPTION 'sys_syn_dblink.column_type_value_row reading_tables_def not found.';
+        END IF;
+
+        RETURN 'quote_literal(' || value_expression || ') || ''::' || quote_ident(_reading_table_def.remote_schema) || '.' ||
+                quote_ident(_reading_table_def.in_table_id || '_in_key') || '''';
+END
+$BODY$
+  LANGUAGE plpgsql STABLE
+  COST 80;
+ALTER FUNCTION sys_syn_dblink.column_type_value_row(text, text, text) OWNER TO postgres;
+
 
 CREATE FUNCTION sys_syn_dblink.reading_table_code(
         reading_table_def                       sys_syn_dblink.reading_tables_def,
@@ -1549,34 +1594,34 @@ DECLARE
         _sql_buffer             TEXT;
         _put_code_sql           sys_syn_dblink.put_code_sql;
 BEGIN
-        _name_claim := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_claim := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_claim');
-        _name_queue_status := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_queue_status := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_queue_status');
         _name_remote_claim := quote_ident(reading_table_def.remote_schema) || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_claim');
-        _name_pull := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_pull := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_pull');
         _name_dblink_conn := quote_nullable(reading_table_def.dblink_connname);
-        _name_read := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_read := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_read');
-        _name_reading := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_reading := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_reading');
         _name_remote_queue_data := quote_ident(reading_table_def.remote_schema) || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_queue_data');
-        _name_process := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_process := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_process');
-        _name_put := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_put := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_put');
-        _name_push_status := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_push_status := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_push_status');
         _name_remote_queue_bulk := quote_ident(reading_table_def.remote_schema) || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_queue_bulk');
-        _name_reading_key := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_reading_key := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_reading_key');
-        _name_reading_attributes := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_reading_attributes := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_reading_attributes');
-        _name_reading_no_diff := quote_ident(reading_table_def.schema::text) || '.' ||
+        _name_reading_no_diff := reading_table_def.schema::text || '.' ||
                 quote_ident(reading_table_def.in_table_id||'_'||reading_table_def.out_group_id||'_reading_no_diff');
 
         _sql_buffer := $$
@@ -1626,7 +1671,7 @@ $$;
                 _sql_remote_array := ',          queue_data.sys_syn_attribute_array_ordinal';
                 _sql_dblink_array := ',  sys_syn_attribute_array_ordinal integer';
                 _sql_group_by := '
-        GROUP BY 1,2,3,4,5,6,7,8,9';
+        GROUP BY 1,2,3,4,5,6,7,8';
         ELSE
                 _sql_data_type_array := '';
                 _sql_attributes_insert := sys_syn_dblink.read_columns_format(read_columns_attribute, ',
@@ -1657,8 +1702,7 @@ BEGIN
                 delta_type,
                 queue_priority,
                 hold_updated,                   prior_hold_reason_count,
-                prior_hold_reason_id,           prior_hold_reason_text,
-                reading_key$$||sys_syn_dblink.read_columns_format(read_columns_key, ',
+                prior_hold_reason_id,           prior_hold_reason_text$$||sys_syn_dblink.read_columns_format(read_columns_key, ',
                 key.%COLUMN_NAME%', '')||_sql_attributes_insert||$$)
         SELECT  queue_data.sys_syn_trans_id_in,
                 CASE queue_data.sys_syn_delta_type
@@ -1669,8 +1713,8 @@ BEGIN
                 END AS delta_type,
                 queue_data.sys_syn_queue_priority,
                 queue_data.sys_syn_hold_updated,           queue_data.sys_syn_hold_reason_count,
-                queue_data.sys_syn_hold_reason_id,         queue_data.sys_syn_hold_reason_text,
-                queue_data.sys_syn_reading_key$$||sys_syn_dblink.read_columns_format(read_columns_key, ',
+                queue_data.sys_syn_hold_reason_id,         queue_data.sys_syn_hold_reason_text$$||
+                sys_syn_dblink.read_columns_format(read_columns_key, ',
                 queue_data.%COLUMN_NAME%', '')||_sql_attributes_select||$$
         FROM    dblink($$||_name_dblink_conn||$$, $DBL$
                         SELECT  queue_data.sys_syn_trans_id_in,
@@ -1682,9 +1726,8 @@ BEGIN
                                 END AS sys_syn_delta_type,
                                 queue_data.sys_syn_queue_priority,
                                 queue_data.sys_syn_hold_updated,           queue_data.sys_syn_hold_reason_count,
-                                queue_data.sys_syn_hold_reason_id,         queue_data.sys_syn_hold_reason_text,
-                                queue_data.sys_syn_reading_key$$||_sql_remote_array||
-                                        sys_syn_dblink.read_columns_format(read_columns_key, ',
+                                queue_data.sys_syn_hold_reason_id,         queue_data.sys_syn_hold_reason_text$$||_sql_remote_array
+                                || sys_syn_dblink.read_columns_format(read_columns_key, ',
                                 queue_data.%COLUMN_NAME%', '')||sys_syn_dblink.read_columns_format(read_columns_attribute, ',
                                 queue_data.%COLUMN_NAME%', '')||$$
                         FROM    $$||_name_remote_queue_data||$$ AS queue_data
@@ -1694,8 +1737,8 @@ BEGIN
                 sys_syn_delta_type smallint,
                 sys_syn_queue_priority smallint,
                 sys_syn_hold_updated boolean,   sys_syn_hold_reason_count integer,
-                sys_syn_hold_reason_id integer, sys_syn_hold_reason_text text,
-                sys_syn_reading_key tid$$||_sql_dblink_array||sys_syn_dblink.read_columns_format(read_columns_key, ',
+                sys_syn_hold_reason_id integer, sys_syn_hold_reason_text text$$||_sql_dblink_array||
+                sys_syn_dblink.read_columns_format(read_columns_key, ',
                 %COLUMN_NAME% %FORMAT_TYPE%', '')||sys_syn_dblink.read_columns_format(read_columns_attribute, ',
                 %COLUMN_NAME% %FORMAT_TYPE%', '')||$$
                 )$$||_sql_group_by||$$;
@@ -1708,7 +1751,7 @@ $DEFINITION$
 $$;
         EXECUTE _sql_buffer;
 
-        EXECUTE 'SELECT * FROM '||quote_ident(table_type_def.schema::text)||'.'||quote_ident(table_type_def.put_sql_proc_name)||
+        EXECUTE 'SELECT * FROM '||table_type_def.schema::text||'.'||quote_ident(table_type_def.put_sql_proc_name)||
                 '($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)'
         INTO    _put_code_sql
         USING   reading_table_def.put_schema::text,     reading_table_def.in_table_id,          reading_table_def.out_group_id,
@@ -1780,10 +1823,10 @@ BEGIN
                         _reading_row.attributes,                _reading_row.no_diff);
 
                 INSERT INTO $$||_name_read||$$ (
-                        reading_key,                            hold_reason_id,
+                        key,                                    hold_reason_id,
                         hold_reason_text,                       queue_priority,
                         processed_time)
-                VALUES (_reading_row.reading_key,               _processed_status.hold_reason_id,
+                VALUES (_reading_row.key,                       _processed_status.hold_reason_id,
                         _processed_status.hold_reason_text,     _processed_status.queue_priority,
                         COALESCE(_processed_status.processed_time, CURRENT_TIMESTAMP));
         END LOOP;
@@ -1802,7 +1845,8 @@ CREATE FUNCTION $$||_name_push_status||$$()
 $DEFINITION$
 DECLARE
         _found                  boolean := FALSE;
-        _found2                 boolean;
+        _remote_found           boolean;
+        _remote_dispatched      boolean;
         _queue_id               smallint;
         _remote_sql             text;
         _reading_table_def      sys_syn_dblink.reading_tables_def;
@@ -1822,8 +1866,10 @@ BEGIN
         _limit := _reading_table_def.remote_status_batch_rows;
 
         LOOP
-                SELECT  $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(reading_key,hold_reason_id,hold_reason_text,queue_id,
-queue_priority,processed_time) VALUES $DBL$ || array_to_string(array_agg('(' || quote_nullable(reading_key) || ',' ||
+                SELECT  $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(key,hold_reason_id,hold_reason_text,queue_id,
+                        queue_priority,processed_time) VALUES $DBL$ || array_to_string(array_agg('(' || $$ ||
+                        sys_syn_dblink.column_type_value_row(reading_table_def.in_table_id, reading_table_def.out_group_id, 'key')||
+                        $$ || ',' ||
                         quote_nullable(hold_reason_id) || ',' || quote_nullable(hold_reason_text) || ',' ||
                         quote_nullable(_queue_id) || ',' || quote_nullable(queue_priority) || ',' ||
                         quote_nullable(processed_time) || ')'), E',\n')
@@ -1831,15 +1877,22 @@ queue_priority,processed_time) VALUES $DBL$ || array_to_string(array_agg('(' || 
                 FROM    $$||_name_read||$$
                 LIMIT   _limit OFFSET _offset;
 
+                SELECT  dblink_get_result.dblink_send_query_result != 'INSERT 0 0'
+                INTO    _remote_found
+                FROM    dblink_get_result($$||_name_dblink_conn||$$) AS dblink_get_result(dblink_send_query_result text);
+
+                -- dblink_get_result must be called once for each query sent, and one additional time to obtain an empty set result.
+                PERFORM dblink_get_result($$||_name_dblink_conn||$$);
+
                 EXIT WHEN _remote_sql IS NULL;
 
-                _found2 := dblink_exec($$||_name_dblink_conn||$$, _remote_sql) != 'INSERT 0 0';
-                _offset := _offset + _limit;
-                _found := TRUE;
+                _remote_dispatched  := dblink_send_query($$||_name_dblink_conn||$$, _remote_sql) = 1;
+                _offset             := _offset + _limit;
+                _found              := TRUE;
         END LOOP;
 
         SELECT  queue_bulk.found
-        INTO    _found2
+        INTO    _remote_found
         FROM    dblink($$||_name_dblink_conn||$$, $DBL$
                         SELECT * FROM $$||_name_remote_queue_bulk||$$($DBL$||quote_nullable(_queue_id)||$DBL$::SMALLINT)
                 $DBL$) AS queue_bulk(found boolean);
@@ -1870,3 +1923,4 @@ SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.in_groups_def', '');
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.out_groups_def', '');
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.put_column_transforms', '');
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.reading_tables_def', '');
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.reading_columns_def', '');

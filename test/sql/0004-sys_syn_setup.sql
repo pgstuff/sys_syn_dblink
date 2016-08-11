@@ -84,7 +84,7 @@ VALUES (1,              'test_data v1');
 INSERT INTO sys_syn.out_groups_def VALUES ('Out Group');
 
 DO $$BEGIN
-        EXECUTE sys_syn.out_table_add_sql('User Data', 'Test Table', 'Out Group', data_view => TRUE);
+        EXECUTE sys_syn.out_table_add_sql('"User Data"'::regnamespace, 'Test Table', 'Out Group', data_view => TRUE);
 END$$;
 
 SELECT "User Data"."Test Table_pull"(FALSE);
@@ -114,8 +114,10 @@ SELECT sys_syn.in_table_add (
 
 INSERT INTO user_data.test_table_array(
         test_table_array_key, test_table_array_updated,             test_table_array_text)
-VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data v1'),
-        (1,              '2010-01-02 03:04:05-00',       'test_data v2');
+VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data1 v1'),
+        (1,              '2010-01-02 03:04:05-00',       'test_data1 v2'),
+        (2,              '2011-01-02 03:04:05-00',       'test_data2 v1'),
+        (2,              '2012-01-02 03:04:05-00',       'test_data2 v2');
 
 SELECT sys_syn.out_table_add('user_data', 'test_table_array', 'out', data_view => TRUE);
 

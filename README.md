@@ -40,18 +40,30 @@ You need to run the test suite using a super user, such as the default
 
     make installcheck PGUSER=postgres
 
-Once sys_syn_dblink is installed, you can add it to a database. PostgreSQL 9.5.0 or greater
-is required. Connect to a database as a super user and run:
+Once sys_syn_dblink is installed, you can add it to a database. PostgreSQL
+9.5.0 or greater is required. Connect to a database as a super user and run:
 
     CREATE EXTENSION sys_syn_dblink;
 
+If you have asciidoc installed, you may make the HTML documentation with:
+
+    make doc-html-single
+
+View the resulting .html file in the doc directory.  If you do not have
+asciidoc installed, the .adoc file can be read with a standard text editor.
+The HTML file will be installed to this path:
+    $(pg_config --docdir)/extension/sys_syn_dblink.html
+
 Dependencies
 ------------
-The `sys_syn_dblink` data type has no dependencies other than PostgreSQL.
+The `sys_syn_dblink` extension has no dependencies other than PostgreSQL.
 
 Copyright and License
 ---------------------
 
-Copyright (c) 2016 The maintainer's name.
+Copyright (c) 2016
+sys_syn copyright is novated to PostgreSQL Global Development Group.
 
-sys_syn_dblink copyright is novated to PostgreSQL Global Development Group.
+sys_syn_dblink is released under the PostgreSQL License, a liberal Open Source
+license, similar to the BSD or MIT licenses.  See the COPYRIGHT file for the
+license.

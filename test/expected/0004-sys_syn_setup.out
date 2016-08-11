@@ -93,7 +93,7 @@ SELECT sys_syn.in_table_add_sql('"User Data"."Test Table"'::regclass, 'In Group'
                                              in_table_add_sql                                              
 -----------------------------------------------------------------------------------------------------------
  SELECT sys_syn.in_table_add (                                                                            +
-                 schema          => 'User Data',                                                          +
+                 schema          => '"User Data"'::regnamespace,                                          +
                  in_table_id     => 'Test Table',                                                         +
                  in_group_id     => 'In Group',                                                           +
                  in_pull_id      => NULL,                                                                 +
@@ -123,7 +123,7 @@ INSERT INTO "User Data"."Test Table"(
 VALUES (1,              'test_data v1');
 INSERT INTO sys_syn.out_groups_def VALUES ('Out Group');
 DO $$BEGIN
-        EXECUTE sys_syn.out_table_add_sql('User Data', 'Test Table', 'Out Group', data_view => TRUE);
+        EXECUTE sys_syn.out_table_add_sql('"User Data"'::regnamespace, 'Test Table', 'Out Group', data_view => TRUE);
 END$$;
 SELECT "User Data"."Test Table_pull"(FALSE);
  Test Table_pull 
@@ -162,8 +162,10 @@ SELECT sys_syn.in_table_add (
 
 INSERT INTO user_data.test_table_array(
         test_table_array_key, test_table_array_updated,             test_table_array_text)
-VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data v1'),
-        (1,              '2010-01-02 03:04:05-00',       'test_data v2');
+VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data1 v1'),
+        (1,              '2010-01-02 03:04:05-00',       'test_data1 v2'),
+        (2,              '2011-01-02 03:04:05-00',       'test_data2 v1'),
+        (2,              '2012-01-02 03:04:05-00',       'test_data2 v2');
 SELECT sys_syn.out_table_add('user_data', 'test_table_array', 'out', data_view => TRUE);
  out_table_add 
 ---------------
@@ -185,9 +187,11 @@ SELECT user_data.test_table_array_out_move();
 (1 row)
 
 SELECT * FROM user_data.test_table_array_out_queue_data;
- sys_syn_key | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_reading_key | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_array_key |   test_table_array_updated   | test_table_array_text 
--------------+---------------------+--------------------+---------------------+------------------+------------------------+---------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+----------------------+------------------------------+-----------------------
- (1)         |                  27 | Add                | Unread              |                  |                        | (0,1)               |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                    1 | Thu Jan 01 19:04:05 2009 PST | test_data v1
- (1)         |                  27 | Add                | Unread              |                  |                        | (0,1)               |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                    1 | Fri Jan 01 19:04:05 2010 PST | test_data v2
-(2 rows)
+ sys_syn_key | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_array_key |   test_table_array_updated   | test_table_array_text 
+-------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+----------------------+------------------------------+-----------------------
+ (1)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                    1 | Thu Jan 01 19:04:05 2009 PST | test_data1 v1
+ (1)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                    1 | Fri Jan 01 19:04:05 2010 PST | test_data1 v2
+ (2)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                    2 | Sat Jan 01 19:04:05 2011 PST | test_data2 v1
+ (2)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                    2 | Sun Jan 01 19:04:05 2012 PST | test_data2 v2
+(4 rows)
 

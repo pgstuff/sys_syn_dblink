@@ -5,7 +5,8 @@ CREATE EXTENSION sys_syn_dblink;
 CREATE SCHEMA reader_schema
         AUTHORIZATION postgres;
 
-SELECT dblink_connect('sys_syn_data', 'dbname=contrib_regression');
+SELECT  dblink_connect('sys_syn_data', 'dbname=contrib_regression host=' ||
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
 SELECT dblink_exec('sys_syn_data', 'BEGIN');
 
 INSERT INTO sys_syn_dblink.in_groups_def VALUES ('group');

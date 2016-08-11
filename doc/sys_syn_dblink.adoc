@@ -1,0 +1,230 @@
+:toc:
+:toclevels: 4
+
+
+
+= sys_syn_dblink
+
+
+
+== Description
+
+A `sys_syn` reader.
+
+
+
+== Synopsis
+
+`sys_syn_dblink` reads `sys_syn` queues.
+
+
+
+== User guide
+
+
+
+=== Requirements
+
+Usage requirements:
+
+- PostgreSQL 9.5 or above.
+- The `dblink` PostgreSQL extension.
+- The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.
+
+Test requirements:
+
+- The `tinyint` PostgreSQL extension.
+
+Documentation requirements:
+
+- `asciidoc`
+
+
+
+=== Installation
+
+
+
+==== Per Server Installation
+
+[source,shell]
+----
+sudo PATH=$PATH make clean && sudo PATH=$PATH make install && make installcheck
+----
+
+
+
+==== Per Database Installation
+
+You only need to run this on the database(s) that will run `sys_syn_dblink`.
+
+[source,sql]
+----
+CREATE EXTENSION sys_syn_dblink;
+----
+
+
+
+=== Usage
+
+
+
+==== Setup
+
+
+
+===== Example Schema & Data
+
+The following examples assume the following schema and data:
+
+[source,sql]
+----
+CREATE EXTENSION sys_syn;
+
+CREATE SCHEMA user_data
+    AUTHORIZATION postgres;
+
+CREATE TABLE user_data.test_table (
+        test_table_key integer NOT NULL,
+        test_table_text text,
+        CONSTRAINT test_table_pkey PRIMARY KEY (test_table_key));
+
+INSERT INTO sys_syn.in_groups_def VALUES ('in');
+
+DO $$BEGIN
+        EXECUTE sys_syn.in_table_add_sql('user_data.test_table'::regclass, 'in');
+END$$;
+
+INSERT INTO user_data.test_table(
+        test_table_key, test_table_text)
+VALUES  (1,              'test_data 1'),
+        (2,              'test_data 2'),
+        (3,              'test_data 3');
+
+INSERT INTO sys_syn.out_groups_def VALUES ('out');
+
+SELECT sys_syn.out_table_add('user_data', 'test_table', 'out', data_view => TRUE);
+
+SELECT user_data.test_table_pull(FALSE);
+SELECT user_data.test_table_out_move();
+
+SELECT key, delta_type, queue_state FROM user_data.test_table_out_queue;
+
+CREATE EXTENSION dblink;
+
+CREATE SCHEMA reader_data
+        AUTHORIZATION postgres;
+
+SELECT  dblink_connect('sys_syn_test', 'dbname=' || quote_literal(current_database()) || ' host=' ||
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
+----
+
+TIP:  The pull and move operations must be run under different transactions.
+
+
+
+===== Add a Local In Group ID
+
+[source,sql]
+----
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
+----
+
+
+
+===== Add the Remote Out Group ID
+
+[source,sql]
+----
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
+----
+
+
+
+===== Add the Table
+
+The `dblink` must be open when you add the table.
+
+When running the `sys_syn_dblink` procedures, the `dblink` connection must be open and available under the name that you specified when you added the table.
+
+[source,sql]
+----
+SELECT sys_syn_dblink.reading_table_add (
+        schema          => 'reader_data',
+        in_table_id     => 'test_table',
+        out_group_id    => 'out',
+        in_group_id     => 'in',
+        dblink_connname => 'sys_syn_test');
+----
+
+
+
+==== Runtime Implementation
+
+
+
+
+===== Claim the Records
+
+Claiming the records ensures that `sys_syn` nor another `sys_syn_dblink` instance will modify the claimed data or status while this instance processes the data.
+
+[source,sql]
+----
+SELECT * FROM reader_data.test_table_out_claim();
+----
+
+A boolean is returned.  False indicates that there are no records to claim and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
+
+
+
+===== Pull the Records
+
+This pulls the records across the `dblink` connection.
+
+[source,sql]
+----
+SELECT * FROM reader_data.test_table_out_pull();
+----
+
+A boolean is returned.  False indicates that there are no records in the queue and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
+
+
+
+===== Process the Records
+
+This processes the records.  The `dblink` connection is not used for this step.
+
+[source,sql]
+----
+SELECT * FROM reader_data.test_table_out_process();
+----
+
+A boolean is returned.  False indicates that there were no records processed and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
+
+
+
+===== Push the Processing Status
+
+This pushes the processing statuses (successes and/or failures) via the `dblink` connection back to the queue and updates the queue.
+
+[source,sql]
+----
+SELECT * FROM reader_data.test_table_out_push_status();
+----
+
+A boolean is returned.  False indicates that there are no statuses to push.  True indicates that the statuses were pushed and that the queue was updated.
+
+
+
+=== More Examples
+
+See the `test` directory for more examples.
+
+
+
+== Copyright and License
+
+Copyright (c) 2016.
+
+`sys_syn_dblink` copyright is novated to PostgreSQL Global Development Group.
+

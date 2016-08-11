@@ -21,7 +21,8 @@ CREATE SCHEMA reader_data
         AUTHORIZATION postgres;
 CREATE SCHEMA put_data
         AUTHORIZATION postgres;
-SELECT dblink_connect('sys_syn_test', 'dbname=contrib_regression');
+SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
  dblink_connect 
 ----------------
  OK
@@ -63,10 +64,11 @@ SELECT * FROM reader_data.test_table_array_out_pull();
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, key, attributes, no_diff
 FROM    reader_data.test_table_array_out_reading
 ORDER BY key, attributes;
- trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | key |                                                  attributes                                                   | no_diff 
--------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+---------------------------------------------------------------------------------------------------------------+---------
-          27 | Add        |                |              |                         |                      |                        | (1) | {"(\"Thu Jan 01 19:04:05 2009 PST\",\"test_data v1\")","(\"Fri Jan 01 19:04:05 2010 PST\",\"test_data v2\")"} | 
-(1 row)
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | key |                                                   attributes                                                    | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------------------------------------------------------------------------------------------------------+---------
+          27 | Add        |                |              |                         |                      |                        | (1) | {"(\"Thu Jan 01 19:04:05 2009 PST\",\"test_data1 v1\")","(\"Fri Jan 01 19:04:05 2010 PST\",\"test_data1 v2\")"} | 
+          27 | Add        |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v1\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v2\")"} | 
+(2 rows)
 
 SELECT * FROM reader_data.test_table_array_out_process();
  test_table_array_out_process 
@@ -79,26 +81,29 @@ FROM    put_data.test_table_array_out
 ORDER BY test_table_array_key, test_table_array_text;
  test_table_array_key |     test_table_array_updated      | test_table_array_text 
 ----------------------+-----------------------------------+-----------------------
-                    1 | ["Fri Jan 01 19:04:05 2010 PST",) | test_data v2
-(1 row)
+                    1 | ["Fri Jan 01 19:04:05 2010 PST",) | test_data1 v2
+                    2 | ["Sun Jan 01 19:04:05 2012 PST",) | test_data2 v2
+(2 rows)
 
 SELECT  test_table_array_key, test_table_array_updated, test_table_array_text
 FROM    put_data.test_table_array_out_history
 ORDER BY test_table_array_key, test_table_array_text;
  test_table_array_key |                    test_table_array_updated                     | test_table_array_text 
-----------------------+------------------------------+-----------------------
-                    1 | ["Thu Jan 01 19:04:05 2009 PST","Fri Jan 01 19:04:05 2010 PST") | test_data v1
-                    1 | ["Fri Jan 01 19:04:05 2010 PST",) | test_data v2
-(2 rows)
-
+----------------------+-----------------------------------------------------------------+-----------------------
+                    1 | ["Thu Jan 01 19:04:05 2009 PST","Fri Jan 01 19:04:05 2010 PST") | test_data1 v1
+                    1 | ["Fri Jan 01 19:04:05 2010 PST",)                               | test_data1 v2
+                    2 | ["Sat Jan 01 19:04:05 2011 PST","Sun Jan 01 19:04:05 2012 PST") | test_data2 v1
+                    2 | ["Sun Jan 01 19:04:05 2012 PST",)                               | test_data2 v2
+(4 rows)
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
 FROM    reader_data.test_table_array_out_read
-ORDER BY reading_key;
+ORDER BY key;
  hold_reason_id | hold_reason_text | queue_priority 
 ----------------+------------------+----------------
                 |                  |               
-(1 row)
+                |                  |               
+(2 rows)
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, key, attributes, no_diff
 FROM    reader_data.test_table_array_out_hold
