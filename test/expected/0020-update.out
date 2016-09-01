@@ -76,6 +76,93 @@ ORDER BY id;
                 |                  |               
 (3 rows)
 
+SELECT * FROM processor_data.test_table_out_push_status();
+ test_table_out_push_status 
+----------------------------
+ t
+(1 row)
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_out_processed()$$) AS test_table_out_processed(result text);
+ result 
+--------
+ t
+(1 row)
+
+SELECT * FROM dblink_exec('sys_syn_test', $$UPDATE user_data.test_table SET test_table_text = 'test_data-b 2' WHERE test_table_id = 2$$);
+ dblink_exec 
+-------------
+ UPDATE 1
+(1 row)
+
+SELECT * FROM dblink_exec('sys_syn_test', $$DELETE FROM user_data.test_table WHERE test_table_id = 1$$);
+ dblink_exec 
+-------------
+ DELETE 1
+(1 row)
+
+SELECT * FROM dblink_exec('sys_syn_test', $$UPDATE sys_syn.trans_id_mod SET trans_id_mod = trans_id_mod + 1$$);
+ dblink_exec 
+-------------
+ UPDATE 1
+(1 row)
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_pull(FALSE)$$) AS test_table_pull(result text);
+ result 
+--------
+ t
+(1 row)
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_out_move()$$) AS test_table_out_move(result text);
+ result 
+--------
+ t
+(1 row)
+
+SELECT * FROM processor_data.test_table_out_claim();
+ test_table_out_claim 
+----------------------
+ t
+(1 row)
+
+SELECT * FROM processor_data.test_table_out_pull();
+ test_table_out_pull 
+---------------------
+ t
+(1 row)
+
+SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
+FROM    processor_data.test_table_out_processing
+ORDER BY id, attributes;
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |    attributes     | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-------------------+---------
+          99 | Delete     |                |              |                         |                      |                        | (1) | ()                | 
+          99 | Change     |                |              |                         |                      |                        | (2) | ("test_data-b 2") | 
+(2 rows)
+
+SELECT * FROM processor_data.test_table_out_process();
+ test_table_out_process 
+------------------------
+ t
+(1 row)
+
+SELECT  *
+FROM    processor_data.test_table_out
+ORDER BY test_table_id, test_table_text;
+ test_table_id | test_table_text 
+---------------+-----------------
+             2 | test_data-b 2
+             3 | test_data 3
+(2 rows)
+
+SELECT  hold_reason_id, hold_reason_text, queue_priority
+FROM    processor_data.test_table_out_processed
+ORDER BY id;
+ hold_reason_id | hold_reason_text | queue_priority 
+----------------+------------------+----------------
+                |                  |               
+                |                  |               
+(2 rows)
+
 SELECT dblink_exec('sys_syn_test', 'ROLLBACK');
  dblink_exec 
 -------------

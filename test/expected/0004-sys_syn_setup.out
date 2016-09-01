@@ -2,15 +2,15 @@ CREATE EXTENSION sys_syn;
 CREATE SCHEMA user_data
     AUTHORIZATION postgres;
 CREATE TABLE user_data.test_table (
-        test_table_key integer NOT NULL,
+        test_table_id integer NOT NULL,
         test_table_text text,
-        CONSTRAINT test_table_pkey PRIMARY KEY (test_table_key));
+        CONSTRAINT test_table_pid PRIMARY KEY (test_table_id));
 INSERT INTO sys_syn.in_groups_def VALUES ('in');
 DO $$BEGIN
         EXECUTE sys_syn.in_table_add_sql('user_data.test_table'::regclass, 'in');
 END$$;
 INSERT INTO user_data.test_table(
-        test_table_key, test_table_text)
+        test_table_id, test_table_text)
 VALUES  (1,              'test_data 1'),
         (2,              'test_data 2'),
         (3,              'test_data 3');
@@ -33,25 +33,25 @@ SELECT user_data.test_table_out_move();
  t
 (1 row)
 
-SELECT key, delta_type, queue_state FROM user_data.test_table_out_queue;
- key | delta_type | queue_state 
+SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
+ id  | delta_type | queue_state 
 -----+------------+-------------
- (1) | Add        | Unread
- (2) | Add        | Unread
- (3) | Add        | Unread
+ (1) | Add        | Unclaimed
+ (2) | Add        | Unclaimed
+ (3) | Add        | Unclaimed
 (3 rows)
 
 CREATE EXTENSION dblink;
 CREATE TABLE public.test_data (
-        test_data_key integer NOT NULL,
+        test_data_id integer NOT NULL,
         test_data_text text,
-        CONSTRAINT test_data_pkey PRIMARY KEY (test_data_key));
+        CONSTRAINT test_data_pid PRIMARY KEY (test_data_id));
 INSERT INTO sys_syn.in_groups_def VALUES ('in_group');
 DO $$BEGIN
         EXECUTE sys_syn.in_table_add_sql('public.test_data'::regclass, 'in_group');
 END$$;
 INSERT INTO public.test_data(
-        test_data_key, test_data_text)
+        test_data_id, test_data_text)
 VALUES  (1,              'test_data 1'),
         (2,              'test_data 2'),
         (3,              'test_data 3');
@@ -74,20 +74,20 @@ SELECT public.test_data_group_move();
  t
 (1 row)
 
-SELECT key, delta_type, queue_state FROM public.test_data_group_queue;
- key | delta_type | queue_state 
+SELECT id, delta_type, queue_state FROM public.test_data_group_queue;
+ id  | delta_type | queue_state 
 -----+------------+-------------
- (1) | Add        | Unread
- (2) | Add        | Unread
- (3) | Add        | Unread
+ (1) | Add        | Unclaimed
+ (2) | Add        | Unclaimed
+ (3) | Add        | Unclaimed
 (3 rows)
 
 CREATE SCHEMA "User Data"
     AUTHORIZATION postgres;
 CREATE TABLE "User Data"."Test Table" (
-        "Test Table Key" integer NOT NULL,
+        "Test Table ID" integer NOT NULL,
         "Test Table Text" text,
-        CONSTRAINT "Test Table_pkey" PRIMARY KEY ("Test Table Key"));
+        CONSTRAINT "Test Table_pid" PRIMARY KEY ("Test Table ID"));
 INSERT INTO sys_syn.in_groups_def VALUES ('In Group');
 SELECT sys_syn.in_table_add_sql('"User Data"."Test Table"'::regclass, 'In Group');
                                              in_table_add_sql                                              
@@ -98,7 +98,7 @@ SELECT sys_syn.in_table_add_sql('"User Data"."Test Table"'::regclass, 'In Group'
                  in_group_id     => 'In Group',                                                           +
                  in_pull_id      => NULL,                                                                 +
                  in_columns      => ARRAY[                                                                +
-                        $COL$("Test Table Key","integer",Key,"in_source.\"Test Table Key\"",,,,)$COL$,    +
+                        $COL$("Test Table ID","integer",ID,"in_source.\"Test Table ID\"",,,,)$COL$,       +
                         $COL$("Test Table Text","text",Attribute,"in_source.\"Test Table Text\"",,,,)$COL$+
                  ]::sys_syn.create_in_column[],                                                           +
                  full_table_reference    => '"User Data"."Test Table"',                                   +
@@ -119,7 +119,7 @@ DO $$BEGIN
         EXECUTE sys_syn.in_table_add_sql('"User Data"."Test Table"'::regclass, 'In Group');
 END$$;
 INSERT INTO "User Data"."Test Table"(
-        "Test Table Key", "Test Table Text")
+        "Test Table ID", "Test Table Text")
 VALUES (1,              'test_data v1');
 INSERT INTO sys_syn.out_groups_def VALUES ('Out Group');
 DO $$BEGIN
@@ -138,17 +138,17 @@ SELECT "User Data"."Test Table_Out Group_move"();
 (1 row)
 
 CREATE TABLE user_data.test_table_array (
-        test_table_array_key integer NOT NULL,
+        test_table_array_id integer NOT NULL,
         test_table_array_updated timestamp with time zone,
         test_table_array_text text,
-        CONSTRAINT test_table_array_pkey PRIMARY KEY (test_table_array_key, test_table_array_updated));
+        CONSTRAINT test_table_array_pid PRIMARY KEY (test_table_array_id, test_table_array_updated));
 SELECT sys_syn.in_table_add (
                 'user_data',
                 'test_table_array',
                 'in',
                 NULL,
                 ARRAY[
-                       $COL$("test_table_array_key","integer",Key,"in_source.test_table_array_key",,,,)$COL$,
+                       $COL$("test_table_array_id","integer",ID,"in_source.test_table_array_id",,,,)$COL$,
                        $COL$("test_table_array_updated","timestamp with time zone",Attribute,"in_source.test_table_array_updated",1,,,)$COL$,
                        $COL$("test_table_array_text","text",Attribute,"in_source.test_table_array_text",,,,)$COL$
                 ]::sys_syn.create_in_column[],
@@ -161,7 +161,7 @@ SELECT sys_syn.in_table_add (
 (1 row)
 
 INSERT INTO user_data.test_table_array(
-        test_table_array_key, test_table_array_updated,             test_table_array_text)
+        test_table_array_id, test_table_array_updated,             test_table_array_text)
 VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data1 v1'),
         (1,              '2010-01-02 03:04:05-00',       'test_data1 v2'),
         (2,              '2011-01-02 03:04:05-00',       'test_data2 v1'),
@@ -172,8 +172,6 @@ SELECT sys_syn.out_table_add('user_data', 'test_table_array', 'out', data_view =
  
 (1 row)
 
-ALTER TABLE user_data.test_table_array_out_queue
-  ADD FOREIGN KEY (trans_id_in, key) REFERENCES user_data.test_table_array_in (trans_id_in, key) ON UPDATE RESTRICT ON DELETE RESTRICT;
 SELECT user_data.test_table_array_pull(FALSE);
  test_table_array_pull 
 -----------------------
@@ -187,11 +185,11 @@ SELECT user_data.test_table_array_out_move();
 (1 row)
 
 SELECT * FROM user_data.test_table_array_out_queue_data;
- sys_syn_key | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_array_key |   test_table_array_updated   | test_table_array_text 
--------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+----------------------+------------------------------+-----------------------
- (1)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                    1 | Thu Jan 01 19:04:05 2009 PST | test_data1 v1
- (1)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                    1 | Fri Jan 01 19:04:05 2010 PST | test_data1 v2
- (2)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                    2 | Sat Jan 01 19:04:05 2011 PST | test_data2 v1
- (2)         |                  27 | Add                | Unread              |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                    2 | Sun Jan 01 19:04:05 2012 PST | test_data2 v2
+ sys_syn_id | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_array_id |   test_table_array_updated   | test_table_array_text 
+------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+---------------------+------------------------------+-----------------------
+ (1)        |                  26 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                   1 | Thu Jan 01 19:04:05 2009 PST | test_data1 v1
+ (1)        |                  26 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                   1 | Fri Jan 01 19:04:05 2010 PST | test_data1 v2
+ (2)        |                  26 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                   2 | Sat Jan 01 19:04:05 2011 PST | test_data2 v1
+ (2)        |                  26 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                   2 | Sun Jan 01 19:04:05 2012 PST | test_data2 v2
 (4 rows)
 

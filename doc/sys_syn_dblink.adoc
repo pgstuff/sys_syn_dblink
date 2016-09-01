@@ -9,17 +9,61 @@
 
 == Description
 
-A `sys_syn` reader.
+A `sys_syn` processor.
 
 
 
 == Synopsis
 
-`sys_syn_dblink` reads `sys_syn` queues.
+`sys_syn_dblink` processes `sys_syn` queues.
+
+The workflow is:
+....
+  +---------+        +-----------+
+  |Procedure|        |Queue State|
+  +---------+        +-----------+
+
+   +------+
+   |pull()|
+   +---+--+
+       |
+       v
+   +---+--+                   /-------\
+   |move()|             *     |       | When the attributes change
+   +---+--+             v     v       | or when you change the
+       |              +-+-----+-+     | status to retry the
+       |              |Unclaimed|     | process.
+       v              +----+----+     |
+   +---+---+               |          |
+   |claim()|               |          |
+   +---+---+               v          |
+       |               +---+---+      |
+       |               |Claimed|      |
+       v               +---+---+      |
+   +---+--+                |          |
+   |pull()|                |          |
+   +---+--+                |          |
+       |                   |          |
+       v                   |          |
+  +----+----+              |          |
+  |process()|              |          |
+  +----+----+         /----+----\     |
+       |              |         |     |
+       v              |         |     |
++------+------+       |         |     |
+|push_status()|       |         |     |
++------+------+       v         v     |
+       |         +----+----+  +-+--+  |
+       |         |Processed|  |Hold|  |
+       v         +----+----+  +-+--+  |
+ +-----+-----+        |         |     |
+ |processed()|        *         \-----/
+ +-----------+
+....
 
 
 
-== User guide
+== User Guide
 
 
 
@@ -34,6 +78,7 @@ Usage requirements:
 Test requirements:
 
 - The `tinyint` PostgreSQL extension.
+- The `temporal_tables` PostgreSQL extension.
 
 Documentation requirements:
 
@@ -85,7 +130,7 @@ CREATE SCHEMA user_data
     AUTHORIZATION postgres;
 
 CREATE TABLE user_data.test_table (
-        test_table_key integer NOT NULL,
+        test_table_id integer NOT NULL,
         test_table_text text,
         CONSTRAINT test_table_pkey PRIMARY KEY (test_table_key));
 
@@ -96,7 +141,7 @@ DO $$BEGIN
 END$$;
 
 INSERT INTO user_data.test_table(
-        test_table_key, test_table_text)
+        test_table_id, test_table_text)
 VALUES  (1,              'test_data 1'),
         (2,              'test_data 2'),
         (3,              'test_data 3');
@@ -106,20 +151,21 @@ INSERT INTO sys_syn.out_groups_def VALUES ('out');
 SELECT sys_syn.out_table_add('user_data', 'test_table', 'out', data_view => TRUE);
 
 SELECT user_data.test_table_pull(FALSE);
+
 SELECT user_data.test_table_out_move();
 
-SELECT key, delta_type, queue_state FROM user_data.test_table_out_queue;
+SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
 
 CREATE EXTENSION dblink;
 
-CREATE SCHEMA reader_data
+CREATE SCHEMA processor_dataa pol
         AUTHORIZATION postgres;
 
 SELECT  dblink_connect('sys_syn_test', 'dbname=' || quote_literal(current_database()) || ' host=' ||
         quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
 ----
 
-TIP:  The pull and move operations must be run under different transactions.
+The pull and move operations must be run under different transactions.
 
 
 
@@ -149,8 +195,8 @@ When running the `sys_syn_dblink` procedures, the `dblink` connection must be op
 
 [source,sql]
 ----
-SELECT sys_syn_dblink.reading_table_add (
-        schema          => 'reader_data',
+SELECT sys_syn_dblink.processing_table_add (
+        schema          => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',
         in_group_id     => 'in',
@@ -170,7 +216,7 @@ Claiming the records ensures that `sys_syn` nor another `sys_syn_dblink` instanc
 
 [source,sql]
 ----
-SELECT * FROM reader_data.test_table_out_claim();
+SELECT * FROM processor_data.test_table_out_claim();
 ----
 
 A boolean is returned.  False indicates that there are no records to claim and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
@@ -183,7 +229,7 @@ This pulls the records across the `dblink` connection.
 
 [source,sql]
 ----
-SELECT * FROM reader_data.test_table_out_pull();
+SELECT * FROM processor_data.test_table_out_pull();
 ----
 
 A boolean is returned.  False indicates that there are no records in the queue and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
@@ -196,7 +242,7 @@ This processes the records.  The `dblink` connection is not used for this step.
 
 [source,sql]
 ----
-SELECT * FROM reader_data.test_table_out_process();
+SELECT * FROM processor_data.test_table_out_process();
 ----
 
 A boolean is returned.  False indicates that there were no records processed and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
@@ -209,10 +255,70 @@ This pushes the processing statuses (successes and/or failures) via the `dblink`
 
 [source,sql]
 ----
-SELECT * FROM reader_data.test_table_out_push_status();
+SELECT * FROM processor_data.test_table_out_push_status();
 ----
 
 A boolean is returned.  False indicates that there are no statuses to push.  True indicates that the statuses were pushed and that the queue was updated.
+
+
+
+==== Advanced
+
+===== put_column_transforms
+
+When new tables are added, the rules in this table adds, modifies, or removes columns.
+
+.Columns
+rule_group_id::
+    NULL for a rule that applies to all tables.
+priority::
+    The order that the rule is applied.
+data_type_like::
+    The rule is applied to the column when the data type matches this LIKE pattern.
+in_table_id_like::
+    The rule is applied to the column when the in_table_id matches this LIKE pattern.
+out_group_id_like::
+    The rule is applied to the column when the out_group_id matches this LIKE pattern.
+in_group_id_like::
+    The rule is applied to the column when the in_group_id matches this LIKE pattern.
+schema_like::
+    The rule is applied to the column when the schema matches this LIKE pattern.
+in_column_type::
+    The rule is applied to the column when the in_column_type is this value.
+column_name_like::
+    The rule is applied to the column when the column name matches this LIKE pattern.
+new_data_type::
+    Change the column's data type to this.
+new_in_column_type::
+    Change the column's in_column_type to this.
+new_column_name::
+    Change the column's name to this.
+pos_type::
+    Change the column's position using this method.
+pos_before::
+    Move the column before instead of after.
+pos_ref_column_names_like::
+    If the position method requires a reference column, find the reference column in the first LIKE pattern that matches in this array.
+pos_in_column_type::
+    If the position method requires an in_column_type, specify it here.
+variable_name::
+    Store the column's value or expression into this variable.  Use new_data_type to specify the variable's data type.
+variable_delta_types::
+    Specify the delta types that this expression runs under.
+variable_exception_traps::
+    Trap expression exceptions using the specified traps.
+expression::
+    Specify an expression for this column.  The original column or expression can be referenced by %1
+add_columns::
+    Add the specified columns.
+omit::
+    Omit this column from the table.  If a variable_name was specified, the associated expression is stored into this variable.  This can be accessed from other expressions.
+final_ids::
+    Stop processing rules with any of these IDs.
+final_rule::
+    Stop processing all rules after this one.
+delta_types::
+    Specify the delta types that this expression runs under.
 
 
 
@@ -226,5 +332,6 @@ See the `test` directory for more examples.
 
 Copyright (c) 2016.
 
-`sys_syn_dblink` copyright is novated to PostgreSQL Global Development Group.
+Legal Notice:  See the COPYRIGHT file.
 
+`sys_syn_dblink` copyright is novated to PostgreSQL Global Development Group.

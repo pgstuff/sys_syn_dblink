@@ -1,7 +1,7 @@
 sys_syn_dblink
 =======
 
-A sys_syn reader.
+A sys_syn processor.
 
 To build it, just do this:
 

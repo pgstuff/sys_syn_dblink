@@ -12,6 +12,29 @@ SELECT dblink_exec('sys_syn_test', 'BEGIN');
 INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
 INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
 
+INSERT INTO sys_syn_dblink.put_column_transforms (
+        priority,       out_group_id_like,      in_group_id_like,
+        in_table_id_like,       column_name_like,
+        add_columns
+) VALUES (
+        150,            'out',                  'in',
+        'test_table',           'test_table_text',
+        ARRAY[
+                ROW(    'id_first',    'smallint',     'ID',
+                        $$1::smallint$$,
+                        NULL,   'InColumnType',         TRUE,   ARRAY[]::TEXT[],
+                        'ID'),
+                ROW(    'id_last',     'text',         'ID',
+                        $$'id'$$,
+                        NULL,   'InColumnType',         FALSE,  ARRAY[]::TEXT[],
+                        'ID'),
+                ROW(    'attr',         'text',         'Attribute',
+                        $$'attr'$$,
+                        NULL,   'Here',                 FALSE,  ARRAY[]::TEXT[],
+                        NULL)
+        ]::sys_syn_dblink.create_put_column[]
+);
+
 SELECT sys_syn_dblink.processing_table_add (
         schema          => 'processor_data',
         in_table_id     => 'test_table',
@@ -37,7 +60,6 @@ ORDER BY test_table_id, test_table_text;
 SELECT  hold_reason_id, hold_reason_text, queue_priority
 FROM    processor_data.test_table_out_processed
 ORDER BY id;
-
 
 
 SELECT dblink_exec('sys_syn_test', 'ROLLBACK');

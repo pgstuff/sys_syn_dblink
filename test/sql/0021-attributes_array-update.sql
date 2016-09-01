@@ -1,29 +1,8 @@
 BEGIN;
 
 CREATE EXTENSION sys_syn_dblink;
-CREATE EXTENSION temporal_tables;
-CREATE EXTENSION btree_gist;
-
-/*INSERT INTO sys_syn_dblink.put_column_transforms(
-        rule_group_id,  priority,       data_type_like,
-        in_table_id_like,       out_group_id_like,      in_group_id_like,
-        schema_like,    in_column_type,                         column_name_like,
-        new_data_type,  new_in_column_type,                     new_column_name,
-        expression,
-        create_put_columns,
-        omit,   final_ids,                      final_rule)
-VALUES (NULL,           100,            NULL,
-        'test_table_array',     NULL,                   NULL,
-        NULL,           NULL,                                   'test_table_array_updated',
-        'tstzrange',    NULL,                                   NULL,
-        'tstzrange(%1, null)',
-        NULL,
-        NULL,   ARRAY[]::TEXT[],                FALSE);*/
 
 CREATE SCHEMA processor_data
-        AUTHORIZATION postgres;
-
-CREATE SCHEMA put_data
         AUTHORIZATION postgres;
 
 SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
@@ -38,8 +17,6 @@ SELECT sys_syn_dblink.processing_table_add (
         in_table_id     => 'test_table_array',
         out_group_id    => 'out',
         in_group_id     => 'in',
-        put_schema      => 'put_data',
-        table_type_id   => 'sys_syn-temporal',
         dblink_connname => 'sys_syn_test');
 
 
@@ -54,19 +31,44 @@ ORDER BY id, attributes;
 SELECT * FROM processor_data.test_table_array_out_process();
 
 SELECT  test_table_array_id, test_table_array_updated, test_table_array_text
-FROM    put_data.test_table_array_out
-ORDER BY test_table_array_id, test_table_array_text;
-
-SELECT  test_table_array_id, test_table_array_updated, test_table_array_text
-FROM    put_data.test_table_array_out_history
+FROM    processor_data.test_table_array_out
 ORDER BY test_table_array_id, test_table_array_text;
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
 FROM    processor_data.test_table_array_out_processed
 ORDER BY id;
 
-
 SELECT * FROM processor_data.test_table_array_out_push_status();
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_array_out_processed()$$) AS test_table_array_out_processed(result text);
+
+SELECT * FROM dblink_exec('sys_syn_test', $$UPDATE user_data.test_table_array SET test_table_array_text = 'test_data2 v3' WHERE test_table_array_id = 2$$);
+
+SELECT * FROM dblink_exec('sys_syn_test', $$DELETE FROM user_data.test_table_array WHERE test_table_array_id = 1$$);
+
+SELECT * FROM dblink_exec('sys_syn_test', $$UPDATE sys_syn.trans_id_mod SET trans_id_mod = trans_id_mod + 1$$);
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_array_pull(FALSE)$$) AS test_table_pull(result text);
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_array_out_move()$$) AS test_table_array_out_move(result text);
+
+SELECT * FROM processor_data.test_table_array_out_claim();
+
+SELECT * FROM processor_data.test_table_array_out_pull();
+
+SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
+FROM    processor_data.test_table_array_out_processing
+ORDER BY id, attributes;
+
+SELECT * FROM processor_data.test_table_array_out_process();
+
+SELECT  test_table_array_id, test_table_array_updated, test_table_array_text
+FROM    processor_data.test_table_array_out
+ORDER BY test_table_array_id, test_table_array_text;
+
+SELECT  hold_reason_id, hold_reason_text, queue_priority
+FROM    processor_data.test_table_array_out_processed
+ORDER BY id;
 
 
 SELECT dblink_exec('sys_syn_test', 'ROLLBACK');

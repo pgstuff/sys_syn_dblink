@@ -4,9 +4,9 @@ CREATE SCHEMA user_data
     AUTHORIZATION postgres;
 
 CREATE TABLE user_data.test_table (
-        test_table_key integer NOT NULL,
+        test_table_id integer NOT NULL,
         test_table_text text,
-        CONSTRAINT test_table_pkey PRIMARY KEY (test_table_key));
+        CONSTRAINT test_table_pid PRIMARY KEY (test_table_id));
 
 INSERT INTO sys_syn.in_groups_def VALUES ('in');
 
@@ -15,7 +15,7 @@ DO $$BEGIN
 END$$;
 
 INSERT INTO user_data.test_table(
-        test_table_key, test_table_text)
+        test_table_id, test_table_text)
 VALUES  (1,              'test_data 1'),
         (2,              'test_data 2'),
         (3,              'test_data 3');
@@ -27,16 +27,16 @@ SELECT sys_syn.out_table_add('user_data', 'test_table', 'out', data_view => TRUE
 SELECT user_data.test_table_pull(FALSE);
 SELECT user_data.test_table_out_move();
 
-SELECT key, delta_type, queue_state FROM user_data.test_table_out_queue;
+SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
 
 CREATE EXTENSION dblink;
 
 
 
 CREATE TABLE public.test_data (
-        test_data_key integer NOT NULL,
+        test_data_id integer NOT NULL,
         test_data_text text,
-        CONSTRAINT test_data_pkey PRIMARY KEY (test_data_key));
+        CONSTRAINT test_data_pid PRIMARY KEY (test_data_id));
 
 INSERT INTO sys_syn.in_groups_def VALUES ('in_group');
 
@@ -45,7 +45,7 @@ DO $$BEGIN
 END$$;
 
 INSERT INTO public.test_data(
-        test_data_key, test_data_text)
+        test_data_id, test_data_text)
 VALUES  (1,              'test_data 1'),
         (2,              'test_data 2'),
         (3,              'test_data 3');
@@ -57,7 +57,7 @@ SELECT sys_syn.out_table_add('public', 'test_data', 'group', data_view => TRUE);
 SELECT public.test_data_pull(FALSE);
 SELECT public.test_data_group_move();
 
-SELECT key, delta_type, queue_state FROM public.test_data_group_queue;
+SELECT id, delta_type, queue_state FROM public.test_data_group_queue;
 
 
 
@@ -65,9 +65,9 @@ CREATE SCHEMA "User Data"
     AUTHORIZATION postgres;
 
 CREATE TABLE "User Data"."Test Table" (
-        "Test Table Key" integer NOT NULL,
+        "Test Table ID" integer NOT NULL,
         "Test Table Text" text,
-        CONSTRAINT "Test Table_pkey" PRIMARY KEY ("Test Table Key"));
+        CONSTRAINT "Test Table_pid" PRIMARY KEY ("Test Table ID"));
 
 INSERT INTO sys_syn.in_groups_def VALUES ('In Group');
 
@@ -78,7 +78,7 @@ DO $$BEGIN
 END$$;
 
 INSERT INTO "User Data"."Test Table"(
-        "Test Table Key", "Test Table Text")
+        "Test Table ID", "Test Table Text")
 VALUES (1,              'test_data v1');
 
 INSERT INTO sys_syn.out_groups_def VALUES ('Out Group');
@@ -93,10 +93,10 @@ SELECT "User Data"."Test Table_Out Group_move"();
 
 
 CREATE TABLE user_data.test_table_array (
-        test_table_array_key integer NOT NULL,
+        test_table_array_id integer NOT NULL,
         test_table_array_updated timestamp with time zone,
         test_table_array_text text,
-        CONSTRAINT test_table_array_pkey PRIMARY KEY (test_table_array_key, test_table_array_updated));
+        CONSTRAINT test_table_array_pid PRIMARY KEY (test_table_array_id, test_table_array_updated));
 
 SELECT sys_syn.in_table_add (
                 'user_data',
@@ -104,7 +104,7 @@ SELECT sys_syn.in_table_add (
                 'in',
                 NULL,
                 ARRAY[
-                       $COL$("test_table_array_key","integer",Key,"in_source.test_table_array_key",,,,)$COL$,
+                       $COL$("test_table_array_id","integer",ID,"in_source.test_table_array_id",,,,)$COL$,
                        $COL$("test_table_array_updated","timestamp with time zone",Attribute,"in_source.test_table_array_updated",1,,,)$COL$,
                        $COL$("test_table_array_text","text",Attribute,"in_source.test_table_array_text",,,,)$COL$
                 ]::sys_syn.create_in_column[],
@@ -113,16 +113,13 @@ SELECT sys_syn.in_table_add (
         );
 
 INSERT INTO user_data.test_table_array(
-        test_table_array_key, test_table_array_updated,             test_table_array_text)
+        test_table_array_id, test_table_array_updated,             test_table_array_text)
 VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data1 v1'),
         (1,              '2010-01-02 03:04:05-00',       'test_data1 v2'),
         (2,              '2011-01-02 03:04:05-00',       'test_data2 v1'),
         (2,              '2012-01-02 03:04:05-00',       'test_data2 v2');
 
 SELECT sys_syn.out_table_add('user_data', 'test_table_array', 'out', data_view => TRUE);
-
-ALTER TABLE user_data.test_table_array_out_queue
-  ADD FOREIGN KEY (trans_id_in, key) REFERENCES user_data.test_table_array_in (trans_id_in, key) ON UPDATE RESTRICT ON DELETE RESTRICT;
 
 SELECT user_data.test_table_array_pull(FALSE);
 SELECT user_data.test_table_array_out_move();
