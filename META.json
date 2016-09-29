@@ -1,7 +1,7 @@
 {
     "name": "sys_syn_dblink",
     "abstract": "System Synchronization Processor - dblink",
-    "description": "A sys_syn dblink.",
+    "description": "A sys_syn processor via dblink.",
     "version": "0.0.1",
     "maintainer": "The maintainer's name",
     "license": "postgresql",

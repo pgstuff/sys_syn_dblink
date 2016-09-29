@@ -2,6 +2,8 @@ BEGIN;
 
 CREATE EXTENSION sys_syn;
 
+CREATE EXTENSION hstore;
+
 CREATE EXTENSION dblink;
 
 CREATE EXTENSION sys_syn_dblink;

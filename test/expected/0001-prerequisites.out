@@ -6,6 +6,7 @@ DO $$BEGIN
                         USING HINT = 'Upgrade this PostgreSQL instance or add another instance with the current version.';
         END IF;
 END$$;
+CREATE EXTENSION hstore;
 CREATE EXTENSION sys_syn;
 CREATE EXTENSION dblink;
 ROLLBACK;

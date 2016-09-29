@@ -17,49 +17,67 @@ A `sys_syn` processor.
 
 `sys_syn_dblink` processes `sys_syn` queues.
 
-The workflow is:
+The runtime workflow is (including `sys_syn` procedures):
 ....
-  +---------+        +-----------+
-  |Procedure|        |Queue State|
-  +---------+        +-----------+
+ ┏━━━━━━━━━━━┓      ┏━━━━━━━━━━━━━┓
+ ┃ Procedure ┃      ┃ Queue State ┃
+ ┗━━━━━━━━━━━┛      ┗━━━━━━━━━━━━━┛
 
-   +------+
-   |pull()|
-   +---+--+
-       |
-       v
-   +---+--+                   /-------\
-   |move()|             *     |       | When the attributes change
-   +---+--+             v     v       | or when you change the
-       |              +-+-----+-+     | status to retry the
-       |              |Unclaimed|     | process.
-       v              +----+----+     |
-   +---+---+               |          |
-   |claim()|               |          |
-   +---+---+               v          |
-       |               +---+---+      |
-       |               |Claimed|      |
-       v               +---+---+      |
-   +---+--+                |          |
-   |pull()|                |          |
-   +---+--+                |          |
-       |                   |          |
-       v                   |          |
-  +----+----+              |          |
-  |process()|              |          |
-  +----+----+         /----+----\     |
-       |              |         |     |
-       v              |         |     |
-+------+------+       |         |     |
-|push_status()|       |         |     |
-+------+------+       v         v     |
-       |         +----+----+  +-+--+  |
-       |         |Processed|  |Hold|  |
-       v         +----+----+  +-+--+  |
- +-----+-----+        |         |     |
- |processed()|        *         \-----/
- +-----------+
+   ┌──────┐
+   │pull()│
+   └──────┘
+       │
+       ↓
+   ┌──────┐                   ╭───────╮
+   │move()│             ✳     │       │ When the attributes change
+   └──────┘             ↓     ↓       │ or when you change the
+       │              ┌─────────┐     │ status to retry the
+       │              │Unclaimed│     │ process.
+       ↓              └─────────┘     │
+   ┌───────┐               │          │
+   │claim()│               │          │
+   └───────┘               ↓          │
+       │               ┌───────┐      │
+       │               │Claimed│      │
+       ↓               └───────┘      │
+   ┌──────┐                │          │
+   │pull()│                │          │
+   └──────┘                │          │
+       │                   │          │
+       ↓                   │          │
+  ┌─────────┐              │          │
+  │process()│              │          │
+  └─────────┘         ╭────┴────╮     │
+       │              │         │     │
+       ↓              │         │     │
+┌─────────────┐       │         │     │
+│push_status()│       │         │     │
+└─────────────┘       ↓         ↓     │
+       │         ┌─────────┐  ┌────┐  │
+       │         │Processed│  │Hold│  │
+       ↓         └─────────┘  └────┘  │
+ ┌───────────┐        │         │     │
+ │processed()│        ✳         ╰─────╯
+ └───────────┘
 ....
+
+The setup workflow is:
+
+* Install the `sys_syn` extension on the database that pulls the data, configure it, and add tables.
+
+* Install the `dblink` and `sys_syn_dblink` extensions on the database that receives the data.
+
+* Create 1 or more in groups (`sys_syn_dblink.in_groups_def`).
+
+* Create 1 or more out groups (`sys_syn_dblink.out_groups_def`).
+
+* Create 1 or more put groups (`sys_syn_dblink.put_groups_def`).
+
+* Optionally add table transform rules to `sys_syn_dblink.put_table_transforms`.
+
+* Optionally add column transform rules to `sys_syn_dblink.put_column_transforms`.
+
+* Call `sys_syn_dblink.processing_table_add` for each table that you are bringing into this database.
 
 
 
@@ -72,8 +90,9 @@ The workflow is:
 Usage requirements:
 
 - PostgreSQL 9.5 or above.
+- The `hstore` PostgreSQL extension.
 - The `dblink` PostgreSQL extension.
-- The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.
+- The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.  It is not required for the database that needs sys_syn_dblink installed on it.
 
 Test requirements:
 
@@ -132,7 +151,7 @@ CREATE SCHEMA user_data
 CREATE TABLE user_data.test_table (
         test_table_id integer NOT NULL,
         test_table_text text,
-        CONSTRAINT test_table_pkey PRIMARY KEY (test_table_key));
+        CONSTRAINT test_table_pkey PRIMARY KEY (test_table_id));
 
 INSERT INTO sys_syn.in_groups_def VALUES ('in');
 
@@ -158,7 +177,7 @@ SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
 
 CREATE EXTENSION dblink;
 
-CREATE SCHEMA processor_dataa pol
+CREATE SCHEMA processor_data
         AUTHORIZATION postgres;
 
 SELECT  dblink_connect('sys_syn_test', 'dbname=' || quote_literal(current_database()) || ' host=' ||
@@ -169,20 +188,46 @@ The pull and move operations must be run under different transactions.
 
 
 
-===== Add a Local In Group ID
+===== Install the Extension
+
+If you have not already installed `sys_syn_dblink`, install it now with:
 
 [source,sql]
 ----
-INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
+CREATE EXTENSION sys_syn_dblink;
+----
+
+
+
+===== Add the Remote In Group ID
+
+Insert a record into the `sys_syn_dblink.in_groups_def` table.  Supply the dblink connection name and the remote `in_group_id`.
+
+[source,sql]
+----
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
 ----
 
 
 
 ===== Add the Remote Out Group ID
 
+Insert a record into the `sys_syn_dblink.out_groups_def` table.  Supply the dblink connection name and the remote `out_group_id`.
+
 [source,sql]
 ----
-INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
+----
+
+
+
+===== Add the Local Put Group ID
+
+Insert a record into the `sys_syn_dblink.put_groups_def` table.  Supply the `put_group_id` that you will use.
+
+[source,sql]
+----
+INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
 ----
 
 
@@ -196,10 +241,10 @@ When running the `sys_syn_dblink` procedures, the `dblink` connection must be op
 [source,sql]
 ----
 SELECT sys_syn_dblink.processing_table_add (
-        schema          => 'processor_data',
+        proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',
-        in_group_id     => 'in',
+        put_group_id    => 'put',
         dblink_connname => 'sys_syn_test');
 ----
 
@@ -266,39 +311,53 @@ A boolean is returned.  False indicates that there are no statuses to push.  Tru
 
 ===== put_column_transforms
 
-When new tables are added, the rules in this table adds, modifies, or removes columns.
+When new tables are added, the rules in this table adds, modifies, or removes columns.  The rule is applied when all criteria that is specified in the rule are true.
 
 .Columns
 rule_group_id::
     NULL for a rule that applies to all tables.
 priority::
     The order that the rule is applied.
-data_type_like::
-    The rule is applied to the column when the data type matches this LIKE pattern.
 in_table_id_like::
-    The rule is applied to the column when the in_table_id matches this LIKE pattern.
+    The rule is applied to the column when the in_table_id matches this `LIKE` pattern.
 out_group_id_like::
-    The rule is applied to the column when the out_group_id matches this LIKE pattern.
+    The rule is applied to the column when the out_group_id matches this `LIKE` pattern.
 in_group_id_like::
-    The rule is applied to the column when the in_group_id matches this LIKE pattern.
-schema_like::
-    The rule is applied to the column when the schema matches this LIKE pattern.
+    The rule is applied to the column when the in_group_id matches this `LIKE` pattern.
+proc_schema_like::
+    The rule is applied to the column when the proc_schema matches this `LIKE` pattern.
+put_schema_like::
+    The rule is applied to the column when the put_schema matches this `LIKE` pattern.
+put_table_name_like::
+    The rule is applied to the column when the put_table_name matches this `LIKE` pattern.
+table_type_id_like::
+    The rule is applied to the column when the table_type_id matches this `LIKE` pattern.
+attributes_array::
+    The rule is applied to the column when the attributes_array is this value.
+dblink_connname_like::
+    The rule is applied to the column when the dblink_connname matches this `LIKE` pattern.
+remote_schema_like::
+    The rule is applied to the column when the remote_schema matches this `LIKE` pattern.
+queue_id::
+    The rule is applied to the column when the queue_id is this value.
 in_column_type::
     The rule is applied to the column when the in_column_type is this value.
 column_name_like::
-    The rule is applied to the column when the column name matches this LIKE pattern.
+    The rule is applied to the column when the column name matches this `LIKE` pattern.
+data_type_like::
+    The rule is applied to the column when the data type matches this `LIKE` pattern.
 new_data_type::
     Change the column's data type to this.
 new_in_column_type::
     Change the column's in_column_type to this.
 new_column_name::
     Change the column's name to this.
-pos_type::
+pos_method::
     Change the column's position using this method.
 pos_before::
     Move the column before instead of after.
 pos_ref_column_names_like::
-    If the position method requires a reference column, find the reference column in the first LIKE pattern that matches in this array.
+    If the position method requires a reference column, find the reference column in the first `LIKE` pattern that matches in this array.
 pos_in_column_type::
     If the position method requires an in_column_type, specify it here.
 variable_name::
@@ -308,7 +367,7 @@ variable_delta_types::
 variable_exception_traps::
     Trap expression exceptions using the specified traps.
 expression::
-    Specify an expression for this column.  The original column or expression can be referenced by %1
+    Specify an expression for this column.  The prior column or expression can be referenced by %1
 add_columns::
     Add the specified columns.
 omit::

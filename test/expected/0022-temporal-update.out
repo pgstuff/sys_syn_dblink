@@ -17,13 +17,14 @@ SELECT dblink_exec('sys_syn_test', 'BEGIN');
  BEGIN
 (1 row)
 
-INSERT INTO sys_syn_dblink.in_groups_def VALUES ('in');
-INSERT INTO sys_syn_dblink.out_groups_def VALUES ('out');
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
+INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
 SELECT sys_syn_dblink.processing_table_add (
-        schema          => 'processor_data',
+        proc_schema     => 'processor_data',
         in_table_id     => 'test_table_array',
         out_group_id    => 'out',
-        in_group_id     => 'in',
+        put_group_id    => 'put',
         put_schema      => 'processor_data',
         table_type_id   => 'sys_syn-temporal',
         dblink_connname => 'sys_syn_test');
@@ -49,8 +50,8 @@ FROM    processor_data.test_table_array_out_processing
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |                                                   attributes                                                    | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------------------------------------------------------------------------------------------------------+---------
-          26 | Add        |                |              |                         |                      |                        | (1) | {"(\"Thu Jan 01 19:04:05 2009 PST\",\"test_data1 v1\")","(\"Fri Jan 01 19:04:05 2010 PST\",\"test_data1 v2\")"} | 
-          26 | Add        |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v1\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v2\")"} | 
+           7 | Add        |                |              |                         |                      |                        | (1) | {"(\"Thu Jan 01 19:04:05 2009 PST\",\"test_data1 v1\")","(\"Fri Jan 01 19:04:05 2010 PST\",\"test_data1 v2\")"} | 
+           7 | Add        |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v1\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v2\")"} | 
 (2 rows)
 
 SELECT * FROM processor_data.test_table_array_out_process();
@@ -115,7 +116,7 @@ SELECT * FROM dblink_exec('sys_syn_test', $$DELETE FROM user_data.test_table_arr
 SELECT * FROM dblink_exec('sys_syn_test', $$UPDATE sys_syn.trans_id_mod SET trans_id_mod = trans_id_mod + 1$$);
  dblink_exec 
 -------------
- UPDATE 1
+ UPDATE 0
 (1 row)
 
 SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_array_pull(FALSE)$$) AS test_table_pull(result text);
@@ -147,7 +148,7 @@ FROM    processor_data.test_table_array_out_processing
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |                                                   attributes                                                    | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------------------------------------------------------------------------------------------------------+---------
-         111 | Change     |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v3\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v3\")"} | 
+          27 | Change     |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v3\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v3\")"} | 
 (1 row)
 
 SELECT * FROM processor_data.test_table_array_out_process();

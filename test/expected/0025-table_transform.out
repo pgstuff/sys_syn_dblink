@@ -2,6 +2,10 @@ BEGIN;
 CREATE EXTENSION sys_syn_dblink;
 CREATE SCHEMA processor_data
         AUTHORIZATION postgres;
+CREATE SCHEMA put
+        AUTHORIZATION postgres;
+CREATE SCHEMA sys_syn_proc
+        AUTHORIZATION postgres;
 SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
         quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
  dblink_connect 
@@ -18,16 +22,15 @@ SELECT dblink_exec('sys_syn_test', 'BEGIN');
 INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
 INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
 INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
-INSERT INTO sys_syn_dblink.put_column_transforms (
-        priority,       data_type_like, out_group_id_like,      in_group_id_like,
-        in_table_id_like,       column_name_like,
-        variable_name,
-        expression
+INSERT INTO sys_syn_dblink.put_table_transforms (
+        priority,       put_group_id_like,      new_put_schema
 ) VALUES (
-        150,            'text',         'out',                  'in',
-        'test_table',           'test_table_text',
-        '_var',
-        $$'From in: ' || COALESCE(%1, '<NULL>')$$
+        150,            'put',                  'put'
+);
+INSERT INTO sys_syn_dblink.put_table_transforms (
+        priority,       dblink_connname_like,   in_group_id_like,       new_proc_schema
+) VALUES (
+        160,            'sys_syn_test',         'in',                   'sys_syn_proc'
 );
 SELECT sys_syn_dblink.processing_table_add (
         proc_schema     => 'processor_data',
@@ -40,20 +43,20 @@ SELECT sys_syn_dblink.processing_table_add (
  
 (1 row)
 
-SELECT * FROM processor_data.test_table_out_claim();
+SELECT * FROM sys_syn_proc.test_table_out_claim();
  test_table_out_claim 
 ----------------------
  t
 (1 row)
 
-SELECT * FROM processor_data.test_table_out_pull();
+SELECT * FROM sys_syn_proc.test_table_out_pull();
  test_table_out_pull 
 ---------------------
  t
 (1 row)
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_out_processing
+FROM    sys_syn_proc.test_table_out_processing
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |   attributes    | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------+---------
@@ -62,24 +65,24 @@ ORDER BY id, attributes;
            1 | Add        |                |              |                         |                      |                        | (3) | ("test_data 3") | 
 (3 rows)
 
-SELECT * FROM processor_data.test_table_out_process();
+SELECT * FROM sys_syn_proc.test_table_out_process();
  test_table_out_process 
 ------------------------
  t
 (1 row)
 
 SELECT  *
-FROM    processor_data.test_table_out
+FROM    put.test_table_out
 ORDER BY test_table_id, test_table_text;
- test_table_id |   test_table_text    
----------------+----------------------
-             1 | From in: test_data 1
-             2 | From in: test_data 2
-             3 | From in: test_data 3
+ test_table_id | test_table_text 
+---------------+-----------------
+             1 | test_data 1
+             2 | test_data 2
+             3 | test_data 3
 (3 rows)
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_out_processed
+FROM    sys_syn_proc.test_table_out_processed
 ORDER BY id;
  hold_reason_id | hold_reason_text | queue_priority 
 ----------------+------------------+----------------

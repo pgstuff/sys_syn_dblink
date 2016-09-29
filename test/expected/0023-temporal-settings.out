@@ -2,24 +2,16 @@ BEGIN;
 CREATE EXTENSION sys_syn_dblink;
 CREATE EXTENSION temporal_tables;
 CREATE EXTENSION btree_gist;
-/*INSERT INTO sys_syn_dblink.put_column_transforms(
-        rule_group_id,  priority,       data_type_like,
-        in_table_id_like,       out_group_id_like,      in_group_id_like,
-        schema_like,    in_column_type,                         column_name_like,
-        new_data_type,  new_in_column_type,                     new_column_name,
-        expression,
-        create_put_columns,
-        omit,   final_ids,                      final_rule)
-VALUES (NULL,           100,            NULL,
-        'test_table_array',     NULL,                   NULL,
-        NULL,           NULL,                                   'test_table_array_updated',
-        'tstzrange',    NULL,                                   NULL,
-        'tstzrange(%1, null)',
-        NULL,
-        NULL,   ARRAY[]::TEXT[],                FALSE);*/
+INSERT INTO sys_syn_dblink.put_table_transforms(
+        rule_group_id,          priority,       final_ids,              in_table_id_like,
+        table_settings)
+VALUES (NULL,                   25,             '{}',                   'test_table_array',
+        $$
+        sys_syn.temporal.active_table_name      => %1_active,
+        sys_syn.temporal.history_table_name     => %1_inactive,
+        sys_syn.temporal.range_1.column_name    => trans_period
+        $$);
 CREATE SCHEMA processor_data
-        AUTHORIZATION postgres;
-CREATE SCHEMA put_data
         AUTHORIZATION postgres;
 SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
         quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
@@ -42,7 +34,7 @@ SELECT sys_syn_dblink.processing_table_add (
         in_table_id     => 'test_table_array',
         out_group_id    => 'out',
         put_group_id    => 'put',
-        put_schema      => 'put_data',
+        put_schema      => 'processor_data',
         table_type_id   => 'sys_syn-temporal',
         dblink_connname => 'sys_syn_test');
  processing_table_add 
@@ -77,19 +69,19 @@ SELECT * FROM processor_data.test_table_array_out_process();
  t
 (1 row)
 
-SELECT  test_table_array_id, test_table_array_updated, test_table_array_text
-FROM    put_data.test_table_array_out
+SELECT  test_table_array_id, trans_period, test_table_array_text
+FROM    processor_data.test_table_array_out_active
 ORDER BY test_table_array_id, test_table_array_text;
- test_table_array_id |     test_table_array_updated      | test_table_array_text 
+ test_table_array_id |           trans_period            | test_table_array_text 
 ---------------------+-----------------------------------+-----------------------
                    1 | ["Fri Jan 01 19:04:05 2010 PST",) | test_data1 v2
                    2 | ["Sun Jan 01 19:04:05 2012 PST",) | test_data2 v2
 (2 rows)
 
-SELECT  test_table_array_id, test_table_array_updated, test_table_array_text
-FROM    put_data.test_table_array_out_history
+SELECT  test_table_array_id, trans_period, test_table_array_text
+FROM    processor_data.test_table_array_out_inactive
 ORDER BY test_table_array_id, test_table_array_text;
- test_table_array_id |                    test_table_array_updated                     | test_table_array_text 
+ test_table_array_id |                          trans_period                           | test_table_array_text 
 ---------------------+-----------------------------------------------------------------+-----------------------
                    1 | ["Thu Jan 01 19:04:05 2009 PST","Fri Jan 01 19:04:05 2010 PST") | test_data1 v1
                    1 | ["Fri Jan 01 19:04:05 2010 PST",)                               | test_data1 v2
@@ -109,6 +101,12 @@ ORDER BY id;
 SELECT * FROM processor_data.test_table_array_out_push_status();
  test_table_array_out_push_status 
 ----------------------------------
+ t
+(1 row)
+
+SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_array_out_processed()$$) AS test_table_array_out_processed(result text);
+ result 
+--------
  t
 (1 row)
 

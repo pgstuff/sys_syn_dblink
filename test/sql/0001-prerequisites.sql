@@ -8,6 +8,8 @@ DO $$BEGIN
         END IF;
 END$$;
 
+CREATE EXTENSION hstore;
+
 CREATE EXTENSION sys_syn;
 
 CREATE EXTENSION dblink;

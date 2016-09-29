@@ -2,4 +2,4 @@
 comment = 'System Synchronization Processor - dblink'
 default_version = '0.0.1'
 relocatable = false
-requires = 'plpgsql, dblink'
+requires = 'plpgsql, hstore, dblink'
