@@ -31,7 +31,7 @@ INSERT INTO sys_syn_dblink.put_table_transforms (
         160,            'sys_syn_test',         'in',                   'sys_syn_proc'
 );
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',

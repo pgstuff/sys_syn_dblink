@@ -36,7 +36,7 @@ INSERT INTO sys_syn_dblink.put_column_transforms (
         ]::sys_syn_dblink.create_put_column[]
 );
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',

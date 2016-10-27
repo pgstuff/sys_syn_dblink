@@ -11,7 +11,7 @@ CREATE TABLE user_data.test_table (
 INSERT INTO sys_syn.in_groups_def VALUES ('in');
 
 DO $$BEGIN
-        EXECUTE sys_syn.in_table_add_sql('user_data.test_table'::regclass, 'in');
+        EXECUTE sys_syn.in_table_create_sql('user_data.test_table'::regclass, 'in');
 END$$;
 
 INSERT INTO user_data.test_table(
@@ -23,8 +23,8 @@ VALUES  (1,              'test_data 1'),
 INSERT INTO sys_syn.out_groups_def VALUES ('out');
 INSERT INTO sys_syn.out_groups_def VALUES ('out2');
 
-SELECT sys_syn.out_table_add('user_data', 'test_table', 'out', data_view => TRUE);
-SELECT sys_syn.out_table_add('user_data', 'test_table', 'out2');
+SELECT sys_syn.out_table_create('user_data', 'test_table', 'out', data_view => TRUE);
+SELECT sys_syn.out_table_create('user_data', 'test_table', 'out2');
 
 SELECT user_data.test_table_pull(FALSE);
 SELECT user_data.test_table_out_move();
@@ -45,7 +45,7 @@ CREATE TABLE public.test_data (
 INSERT INTO sys_syn.in_groups_def VALUES ('group');
 
 DO $$BEGIN
-        EXECUTE sys_syn.in_table_add_sql('public.test_data'::regclass, 'group');
+        EXECUTE sys_syn.in_table_create_sql('public.test_data'::regclass, 'group');
 END$$;
 
 INSERT INTO public.test_data(
@@ -56,7 +56,7 @@ VALUES  (1,              'test_data 1'),
 
 INSERT INTO sys_syn.out_groups_def VALUES ('group');
 
-SELECT sys_syn.out_table_add('public', 'test_data', 'group', data_view => TRUE);
+SELECT sys_syn.out_table_create('public', 'test_data', 'group', data_view => TRUE);
 
 SELECT public.test_data_pull(FALSE);
 SELECT public.test_data_group_move();
@@ -75,10 +75,10 @@ CREATE TABLE "User Data"."Test Table" (
 
 INSERT INTO sys_syn.in_groups_def VALUES ('In Group');
 
-SELECT sys_syn.in_table_add_sql('"User Data"."Test Table"'::regclass, 'In Group');
+SELECT sys_syn.in_table_create_sql('"User Data"."Test Table"'::regclass, 'In Group');
 
 DO $$BEGIN
-        EXECUTE sys_syn.in_table_add_sql('"User Data"."Test Table"'::regclass, 'In Group');
+        EXECUTE sys_syn.in_table_create_sql('"User Data"."Test Table"'::regclass, 'In Group');
 END$$;
 
 INSERT INTO "User Data"."Test Table"(
@@ -88,7 +88,7 @@ VALUES (1,              'test_data v1');
 INSERT INTO sys_syn.out_groups_def VALUES ('Out Group');
 
 DO $$BEGIN
-        EXECUTE sys_syn.out_table_add_sql('"User Data"'::regnamespace, 'Test Table', 'Out Group', data_view => TRUE);
+        EXECUTE sys_syn.out_table_create_sql('"User Data"'::regnamespace, 'Test Table', 'Out Group', data_view => TRUE);
 END$$;
 
 SELECT "User Data"."Test Table_pull"(FALSE);
@@ -102,7 +102,7 @@ CREATE TABLE user_data.test_table_array (
         test_table_array_text text,
         CONSTRAINT test_table_array_pid PRIMARY KEY (test_table_array_id, test_table_array_updated));
 
-SELECT sys_syn.in_table_add (
+SELECT sys_syn.in_table_create (
                 'user_data',
                 'test_table_array',
                 'in',
@@ -123,7 +123,7 @@ VALUES  (1,              '2009-01-02 03:04:05-00',       'test_data1 v1'),
         (2,              '2011-01-02 03:04:05-00',       'test_data2 v1'),
         (2,              '2012-01-02 03:04:05-00',       'test_data2 v2');
 
-SELECT sys_syn.out_table_add('user_data', 'test_table_array', 'out', data_view => TRUE);
+SELECT sys_syn.out_table_create('user_data', 'test_table_array', 'out', data_view => TRUE);
 
 SELECT user_data.test_table_array_pull(FALSE);
 SELECT user_data.test_table_array_out_move();
@@ -140,7 +140,7 @@ CREATE TABLE user_data.test_table_bitemporal (
         test_table_bitemporal_text text,
         CONSTRAINT test_table_bitemporal_pid PRIMARY KEY (test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bitemporal_start));
 
-SELECT sys_syn.in_table_add (
+SELECT sys_syn.in_table_create (
                 'user_data',
                 'test_table_bitemporal',
                 'in',
@@ -170,7 +170,7 @@ VALUES  (1,              '2009-01-02 03:04:05-00',       '2009-01-03',  '9999-12
         (5,              '2013-01-02 03:04:05-00',       '2009-03-01',  '9999-12-31',   'test_data5 v3 forward period_2 change'),
         (5,              '2014-01-02 03:04:05-00',       '2009-02-01',  '9999-12-31',   'test_data5 v4 backdate period_2 change');
 
-SELECT sys_syn.out_table_add('user_data', 'test_table_bitemporal', 'out', data_view => TRUE);
+SELECT sys_syn.out_table_create('user_data', 'test_table_bitemporal', 'out', data_view => TRUE);
 
 SELECT user_data.test_table_bitemporal_pull(FALSE);
 SELECT user_data.test_table_bitemporal_out_move();

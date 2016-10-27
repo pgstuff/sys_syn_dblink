@@ -25,7 +25,7 @@ INSERT INTO sys_syn_dblink.put_column_transforms (
         $$'From in: ' || COALESCE(%1, '<NULL>')$$
 );
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',

@@ -25,7 +25,7 @@ INSERT INTO sys_syn_dblink.put_column_transforms (
         $$'1/(x%2): ' || 1 / (split_part(%1, ' ', 2)::int % 2)$$
 );
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',

@@ -13,7 +13,7 @@ INSERT INTO sys_syn_dblink.in_groups_def VALUES ('SysSyn Data', 'In Group');
 INSERT INTO sys_syn_dblink.out_groups_def VALUES ('SysSyn Data', 'Out Group');
 INSERT INTO sys_syn_dblink.put_groups_def VALUES ('Put Group');
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => '"Processor Schema"'::regnamespace,
         in_table_id     => 'Test Table',
         out_group_id    => 'Out Group',

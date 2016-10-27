@@ -69,7 +69,7 @@ INSERT INTO sys_syn_dblink.put_column_transforms (
 );
 
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table_array',
         out_group_id    => 'out',
@@ -78,7 +78,7 @@ SELECT sys_syn_dblink.processing_table_add (
         put_table_name  => 'combined_data',
         dblink_connname => 'sys_syn_test');
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',

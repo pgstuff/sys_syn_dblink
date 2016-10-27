@@ -77,7 +77,7 @@ The setup workflow is:
 
 * Optionally add column transform rules to `sys_syn_dblink.put_column_transforms`.
 
-* Call `sys_syn_dblink.processing_table_add` for each table that you are bringing into this database.
+* Call `sys_syn_dblink.processing_table_create` for each table that you are bringing into this database.
 
 
 
@@ -93,6 +93,7 @@ Usage requirements:
 - The `hstore` PostgreSQL extension.
 - The `dblink` PostgreSQL extension.
 - The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.  It is not required for the database that needs sys_syn_dblink installed on it.
+- The `temporal_tables` PostgreSQL extension if you use the temporal or bitemporal table_types.
 
 Test requirements:
 
@@ -102,6 +103,7 @@ Test requirements:
 Documentation requirements:
 
 - `asciidoc`
+- `source-highlight`
 
 
 
@@ -156,7 +158,7 @@ CREATE TABLE user_data.test_table (
 INSERT INTO sys_syn.in_groups_def VALUES ('in');
 
 DO $$BEGIN
-        EXECUTE sys_syn.in_table_add_sql('user_data.test_table'::regclass, 'in');
+        EXECUTE sys_syn.in_table_create_sql('user_data.test_table'::regclass, 'in');
 END$$;
 
 INSERT INTO user_data.test_table(
@@ -167,7 +169,7 @@ VALUES  (1,              'test_data 1'),
 
 INSERT INTO sys_syn.out_groups_def VALUES ('out');
 
-SELECT sys_syn.out_table_add('user_data', 'test_table', 'out', data_view => TRUE);
+SELECT sys_syn.out_table_create('user_data', 'test_table', 'out', data_view => TRUE);
 
 SELECT user_data.test_table_pull(FALSE);
 
@@ -240,12 +242,23 @@ When running the `sys_syn_dblink` procedures, the `dblink` connection must be op
 
 [source,sql]
 ----
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',
         put_group_id    => 'put',
         dblink_connname => 'sys_syn_test');
+----
+
+
+
+===== Drop the Table
+
+Specify true to drop the put table.
+
+[source,sql]
+----
+SELECT sys_syn_dblink.processing_table_drop ('test_table', 'out', false);
 ----
 
 

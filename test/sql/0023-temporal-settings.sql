@@ -25,7 +25,7 @@ INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
 INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
 INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
 
-SELECT sys_syn_dblink.processing_table_add (
+SELECT sys_syn_dblink.processing_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table_array',
         out_group_id    => 'out',
