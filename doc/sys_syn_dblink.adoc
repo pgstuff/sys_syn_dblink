@@ -351,8 +351,6 @@ dblink_connname_like::
     The rule is applied to the column when the dblink_connname matches this `LIKE` pattern.
 remote_schema_like::
     The rule is applied to the column when the remote_schema matches this `LIKE` pattern.
-queue_id::
-    The rule is applied to the column when the queue_id is this value.
 in_column_type::
     The rule is applied to the column when the in_column_type is this value.
 column_name_like::
@@ -402,7 +400,7 @@ See the `test` directory for more examples.
 
 == Copyright and License
 
-Copyright (c) 2016.
+Copyright (c) 2016-2017.
 
 Legal Notice:  See the COPYRIGHT file.
 

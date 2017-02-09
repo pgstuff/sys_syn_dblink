@@ -88,36 +88,36 @@ SELECT sys_syn_dblink.processing_table_create (
         dblink_connname => 'sys_syn_test');
 
 
-SELECT * FROM processor_data.test_table_array_out_claim();
-SELECT * FROM processor_data.test_table_out_claim();
+SELECT * FROM processor_data.test_table_array_out_0_claim();
+SELECT * FROM processor_data.test_table_out_0_claim();
 
-SELECT * FROM processor_data.test_table_array_out_pull();
-SELECT * FROM processor_data.test_table_out_pull();
+SELECT * FROM processor_data.test_table_array_out_0_pull();
+SELECT * FROM processor_data.test_table_out_0_pull();
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_array_out_processing
+FROM    processor_data.test_table_array_out_0_processing
 ORDER BY id, attributes;
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_out_processing
+FROM    processor_data.test_table_out_0_processing
 ORDER BY id, attributes;
 
-SELECT * FROM processor_data.test_table_array_out_process();
-SELECT * FROM processor_data.test_table_out_process();
+SELECT * FROM processor_data.test_table_array_out_0_process();
+SELECT * FROM processor_data.test_table_out_0_process();
 
 SELECT  *
 FROM    put_data.combined_data
 ORDER BY 1, 2;
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_array_out_processed
+FROM    processor_data.test_table_array_out_0_processed
 ORDER BY id;
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_out_processed
+FROM    processor_data.test_table_out_0_processed
 ORDER BY id;
 
-SELECT * FROM processor_data.test_table_array_out_push_status();
+SELECT * FROM processor_data.test_table_array_out_0_push_status();
 
 
 SELECT dblink_exec('sys_syn_test', 'ROLLBACK');

@@ -61,7 +61,7 @@ The `sys_syn_dblink` extension has no dependencies other than PostgreSQL.
 Copyright and License
 ---------------------
 
-Copyright (c) 2016
+Copyright (c) 2016-2017
 sys_syn copyright is novated to PostgreSQL Global Development Group.
 
 sys_syn_dblink is released under the PostgreSQL License, a liberal Open Source

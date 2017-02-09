@@ -1,6 +1,25 @@
 BEGIN;
 
 CREATE EXTENSION sys_syn_dblink;
+CREATE EXTENSION temporal_tables;
+CREATE EXTENSION btree_gist;
+
+INSERT INTO sys_syn_dblink.put_table_transforms (
+        priority,       in_group_id_like,       in_table_id_like,       new_put_table_name,
+        add_columns
+) VALUES (
+        100,            'in',                   'test_table',           'test_table_temporal',
+        ARRAY[
+                --      column_name,            data_type,                      in_column_type,
+                --      value_expression,
+                --      array_order,    pos_method,             pos_before,     pos_ref_column_names_like,
+                --      pos_in_column_type
+                ROW(    'system_timestamp',     'timestamp with time zone',     'Attribute',
+                        $$'-infinity'::timestamp with time zone$$,
+                        1,              'InColumnType',         FALSE,          ARRAY[]::TEXT[],
+                        'Attribute')
+        ]::sys_syn_dblink.create_put_column[]
+);
 
 CREATE SCHEMA processor_data
         AUTHORIZATION postgres;
@@ -22,7 +41,7 @@ SELECT sys_syn_dblink.processing_table_create (
         out_group_id    => 'out',
         put_group_id    => 'put',
         put_schema      => 'put_data',
-        table_type_id   => 'sys_syn-direct',
+        table_type_id   => 'sys_syn-temporal',
         dblink_connname => 'sys_syn_test');
 
 
@@ -36,9 +55,18 @@ ORDER BY id, attributes;
 
 SELECT * FROM processor_data.test_table_out_0_process();
 
-SELECT  *
-FROM    put_data.test_table_out
-ORDER BY test_table_id, test_table_text;
+SELECT  test_table_id, system_timestamp, test_table_text
+FROM    put_data.test_table_temporal
+ORDER BY test_table_id, system_timestamp, test_table_text;
+
+SELECT  test_table_id, system_timestamp, test_table_text
+FROM    put_data.test_table_temporal_history
+ORDER BY test_table_id, system_timestamp, test_table_text;
+
+SELECT  hold_reason_id, hold_reason_text, queue_priority
+FROM    processor_data.test_table_out_0_processed
+ORDER BY id;
+
 
 SELECT * FROM processor_data.test_table_out_0_push_status();
 

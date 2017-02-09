@@ -21,26 +21,26 @@ SELECT sys_syn_dblink.processing_table_create (
         dblink_connname => 'sys_syn_test');
 
 
-SELECT * FROM processor_data.test_table_out_claim();
+SELECT * FROM processor_data.test_table_out_0_claim();
 
-SELECT * FROM processor_data.test_table_out_pull();
+SELECT * FROM processor_data.test_table_out_0_pull();
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_out_processing
+FROM    processor_data.test_table_out_0_processing
 ORDER BY id, attributes;
 
-SELECT * FROM processor_data.test_table_out_process();
+SELECT * FROM processor_data.test_table_out_0_process();
 
 SELECT  *
 FROM    processor_data.test_table_out
 ORDER BY test_table_id, test_table_text;
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_out_processed
+FROM    processor_data.test_table_out_0_processed
 ORDER BY id;
 
 
-SELECT * FROM processor_data.test_table_out_push_status();
+SELECT * FROM processor_data.test_table_out_0_push_status();
 
 SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_out_processed()$$) AS test_table_out_processed(result text);
 
@@ -54,22 +54,22 @@ SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_pull(FALSE)$$
 
 SELECT * FROM dblink('sys_syn_test', $$SELECT user_data.test_table_out_move()$$) AS test_table_out_move(result text);
 
-SELECT * FROM processor_data.test_table_out_claim();
+SELECT * FROM processor_data.test_table_out_0_claim();
 
-SELECT * FROM processor_data.test_table_out_pull();
+SELECT * FROM processor_data.test_table_out_0_pull();
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_out_processing
+FROM    processor_data.test_table_out_0_processing
 ORDER BY id, attributes;
 
-SELECT * FROM processor_data.test_table_out_process();
+SELECT * FROM processor_data.test_table_out_0_process();
 
 SELECT  *
 FROM    processor_data.test_table_out
 ORDER BY test_table_id, test_table_text;
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_out_processed
+FROM    processor_data.test_table_out_0_processed
 ORDER BY id;
 
 

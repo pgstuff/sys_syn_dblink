@@ -29,27 +29,27 @@ SELECT sys_syn_dblink.processing_table_create (
  
 (1 row)
 
-SELECT * FROM "Processor Schema"."Test Table_Out Group_claim"();
- Test Table_Out Group_claim 
-----------------------------
- t
-(1 row)
-
-SELECT * FROM "Processor Schema"."Test Table_Out Group_pull"();
- Test Table_Out Group_pull 
----------------------------
- t
-(1 row)
-
-SELECT * FROM "Processor Schema"."Test Table_Out Group_process"();
- Test Table_Out Group_process 
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_claim"();
+ Test Table_Out Group_0_claim 
 ------------------------------
  t
 (1 row)
 
-SELECT * FROM "Processor Schema"."Test Table_Out Group_push_status"();
- Test Table_Out Group_push_status 
-----------------------------------
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_pull"();
+ Test Table_Out Group_0_pull 
+-----------------------------
+ t
+(1 row)
+
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_process"();
+ Test Table_Out Group_0_process 
+--------------------------------
+ t
+(1 row)
+
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_push_status"();
+ Test Table_Out Group_0_push_status 
+------------------------------------
  t
 (1 row)
 

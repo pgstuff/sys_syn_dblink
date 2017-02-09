@@ -21,13 +21,13 @@ SELECT sys_syn_dblink.processing_table_create (
         dblink_connname => 'SysSyn Data');
 
 
-SELECT * FROM "Processor Schema"."Test Table_Out Group_claim"();
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_claim"();
 
-SELECT * FROM "Processor Schema"."Test Table_Out Group_pull"();
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_pull"();
 
-SELECT * FROM "Processor Schema"."Test Table_Out Group_process"();
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_process"();
 
-SELECT * FROM "Processor Schema"."Test Table_Out Group_push_status"();
+SELECT * FROM "Processor Schema"."Test Table_Out Group_0_push_status"();
 
 
 SELECT dblink_exec('SysSyn Data', 'ROLLBACK');

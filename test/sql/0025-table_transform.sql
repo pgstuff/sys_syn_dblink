@@ -39,22 +39,22 @@ SELECT sys_syn_dblink.processing_table_create (
         dblink_connname => 'sys_syn_test');
 
 
-SELECT * FROM sys_syn_proc.test_table_out_claim();
+SELECT * FROM sys_syn_proc.test_table_out_0_claim();
 
-SELECT * FROM sys_syn_proc.test_table_out_pull();
+SELECT * FROM sys_syn_proc.test_table_out_0_pull();
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    sys_syn_proc.test_table_out_processing
+FROM    sys_syn_proc.test_table_out_0_processing
 ORDER BY id, attributes;
 
-SELECT * FROM sys_syn_proc.test_table_out_process();
+SELECT * FROM sys_syn_proc.test_table_out_0_process();
 
 SELECT  *
 FROM    put.test_table_out
 ORDER BY test_table_id, test_table_text;
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    sys_syn_proc.test_table_out_processed
+FROM    sys_syn_proc.test_table_out_0_processed
 ORDER BY id;
 
 

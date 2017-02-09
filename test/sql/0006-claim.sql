@@ -21,7 +21,7 @@ SELECT sys_syn_dblink.processing_table_create (
         dblink_connname => 'sys_syn_test');
 
 
-SELECT * FROM processor_data.test_table_out_claim();
+SELECT * FROM processor_data.test_table_out_0_claim();
 
 
 SELECT dblink_exec('sys_syn_test', 'ROLLBACK');

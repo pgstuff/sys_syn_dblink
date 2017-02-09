@@ -29,9 +29,9 @@ SELECT sys_syn_dblink.processing_table_create (
  
 (1 row)
 
-SELECT * FROM processor_data.test_table_out_claim();
- test_table_out_claim 
-----------------------
+SELECT * FROM processor_data.test_table_out_0_claim();
+ test_table_out_0_claim 
+------------------------
  t
 (1 row)
 

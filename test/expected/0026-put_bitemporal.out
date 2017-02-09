@@ -42,20 +42,20 @@ SELECT sys_syn_dblink.processing_table_create (
  
 (1 row)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_claim();
- test_table_bitemporal_out_claim 
----------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_out_0_claim();
+ test_table_bitemporal_out_0_claim 
+-----------------------------------
  t
 (1 row)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_pull();
- test_table_bitemporal_out_pull 
---------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_out_0_pull();
+ test_table_bitemporal_out_0_pull 
+----------------------------------
  t
 (1 row)
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_bitemporal_out_processing
+FROM    processor_data.test_table_bitemporal_out_0_processing
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |                                                                                                                                                                                               attributes                                                                                                                                                                                                | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------
@@ -66,9 +66,9 @@ ORDER BY id, attributes;
            9 | Add        |                |              |                         |                      |                        | (5) | {"(\"Sat Jan 01 19:04:05 2011 PST\",01-01-2009,12-31-9999,\"test_data5 v1 original\")","(\"Sun Jan 01 19:04:05 2012 PST\",01-01-2009,12-31-9999,\"test_data5 v2 replace period_2 change\")","(\"Tue Jan 01 19:04:05 2013 PST\",03-01-2009,12-31-9999,\"test_data5 v3 forward period_2 change\")","(\"Wed Jan 01 19:04:05 2014 PST\",02-01-2009,12-31-9999,\"test_data5 v4 backdate period_2 change\")"} | 
 (5 rows)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_process();
- test_table_bitemporal_out_process 
------------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_out_0_process();
+ test_table_bitemporal_out_0_process 
+-------------------------------------
  t
 (1 row)
 
@@ -143,7 +143,7 @@ ORDER BY test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bit
 (5 rows)
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_bitemporal_out_processed
+FROM    processor_data.test_table_bitemporal_out_0_processed
 ORDER BY id;
  hold_reason_id | hold_reason_text | queue_priority 
 ----------------+------------------+----------------
@@ -154,9 +154,9 @@ ORDER BY id;
                 |                  |               
 (5 rows)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_push_status();
- test_table_bitemporal_out_push_status 
----------------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_out_0_push_status();
+ test_table_bitemporal_out_0_push_status 
+-----------------------------------------
  t
 (1 row)
 
