@@ -15,41 +15,42 @@ SELECT dblink_exec('sys_syn_data', 'BEGIN');
  BEGIN
 (1 row)
 
-INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_data', 'group');
-INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_data', 'group');
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'group');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_dblink-test', 'group');
 INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put_group');
-SELECT sys_syn_dblink.processing_table_create (
+SELECT sys_syn_dblink.proc_table_create (
         proc_schema     => 'processor_schema',
+        put_schema      => 'processor_schema',
         in_table_id     => 'test_data',
         out_group_id    => 'group',
         put_group_id    => 'put_group',
         dblink_connname => 'sys_syn_data');
- processing_table_create 
--------------------------
+ proc_table_create 
+-------------------
  
 (1 row)
 
-SELECT * FROM processor_schema.test_data_group_0_claim();
- test_data_group_0_claim 
+SELECT * FROM processor_schema.test_data_claim_1();
+ test_data_claim_1 
+-------------------
+ t
+(1 row)
+
+SELECT * FROM processor_schema.test_data_pull_1();
+ test_data_pull_1 
+------------------
+ t
+(1 row)
+
+SELECT * FROM processor_schema.test_data_process_1();
+ test_data_process_1 
+---------------------
+ t
+(1 row)
+
+SELECT * FROM processor_schema.test_data_push_status_1();
+ test_data_push_status_1 
 -------------------------
- t
-(1 row)
-
-SELECT * FROM processor_schema.test_data_group_0_pull();
- test_data_group_0_pull 
-------------------------
- t
-(1 row)
-
-SELECT * FROM processor_schema.test_data_group_0_process();
- test_data_group_0_process 
----------------------------
- t
-(1 row)
-
-SELECT * FROM processor_schema.test_data_group_0_push_status();
- test_data_group_0_push_status 
--------------------------------
  t
 (1 row)
 

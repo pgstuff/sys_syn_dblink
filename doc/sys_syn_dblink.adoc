@@ -63,9 +63,9 @@ The runtime workflow is (including `sys_syn` procedures):
 
 The setup workflow is:
 
-* Install the `sys_syn` extension on the database that pulls the data, configure it, and add tables.
+* Install the `sys_syn` extension and its dependencies on the database that pulls the data, configure it, and add tables.
 
-* Install the `dblink` and `sys_syn_dblink` extensions on the database that receives the data.
+* Install the `hstore`, `dblink`, and `sys_syn_dblink` extensions on the database that receives the data.
 
 * Create 1 or more in groups (`sys_syn_dblink.in_groups_def`).
 
@@ -77,7 +77,7 @@ The setup workflow is:
 
 * Optionally add column transform rules to `sys_syn_dblink.put_column_transforms`.
 
-* Call `sys_syn_dblink.processing_table_create` for each table that you are bringing into this database.
+* Call `sys_syn_dblink.proc_table_create` for each table that you are bringing into this database.
 
 
 
@@ -92,12 +92,14 @@ Usage requirements:
 - PostgreSQL 9.5 or above.
 - The `hstore` PostgreSQL extension.
 - The `dblink` PostgreSQL extension.
-- The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.  It is not required for the database that needs sys_syn_dblink installed on it.
+- The `sys_syn` and `pgcrypto` PostgreSQL extensions installed and used on the database that you are connecting to.  These are not required for the database that needs sys_syn_dblink installed on it.
 - The `temporal_tables` PostgreSQL extension if you use the temporal or bitemporal table_types.
 
 Test requirements:
 
 - The `tinyint` PostgreSQL extension.
+- The `pgcrypto` PostgreSQL extension.
+- The `sys_syn` PostgreSQL extension.
 - The `temporal_tables` PostgreSQL extension.
 
 Documentation requirements:
@@ -126,6 +128,8 @@ You only need to run this on the database(s) that will run `sys_syn_dblink`.
 
 [source,sql]
 ----
+CREATE EXTENSION hstore;
+CREATE EXTENSION dblink;
 CREATE EXTENSION sys_syn_dblink;
 ----
 
@@ -145,7 +149,10 @@ The following examples assume the following schema and data:
 
 [source,sql]
 ----
+CREATE EXTENSION pgcrypto;
 CREATE EXTENSION sys_syn;
+
+INSERT INTO sys_syn.settings(cluster_id) VALUES ('sys_syn_dblink-test');
 
 CREATE SCHEMA user_data
     AUTHORIZATION postgres;
@@ -173,11 +180,9 @@ SELECT sys_syn.out_table_create('user_data', 'test_table', 'out', data_view => T
 
 SELECT user_data.test_table_pull(FALSE);
 
-SELECT user_data.test_table_out_move();
+SELECT user_data.test_table_out_move_1();
 
 SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
-
-CREATE EXTENSION dblink;
 
 CREATE SCHEMA processor_data
         AUTHORIZATION postgres;
@@ -192,6 +197,14 @@ The pull and move operations must be run under different transactions.
 
 ===== Install the Extension
 
+You may need to install these dependencies first:
+
+[source,sql]
+----
+CREATE EXTENSION hstore;
+CREATE EXTENSION dblink;
+----
+
 If you have not already installed `sys_syn_dblink`, install it now with:
 
 [source,sql]
@@ -203,22 +216,31 @@ CREATE EXTENSION sys_syn_dblink;
 
 ===== Add the Remote In Group ID
 
-Insert a record into the `sys_syn_dblink.in_groups_def` table.  Supply the dblink connection name and the remote `in_group_id`.
+Insert a record into the `sys_syn_dblink.in_groups_def` table.  Supply the remote cluster_id and the remote `in_group_id`.
 
 [source,sql]
 ----
-INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'in');
 ----
+
+If you do not know the remote sys_syn cluster_id, you can query it with:
+
+[source,sql]
+----
+SELECT * FROM dblink('sys_syn_test', 'SELECT cluster_id FROM sys_syn.settings') AS settings_cluster_id(cluster_id text);
+----
+
+If the remote sys_syn has not moved any data since it was installed, the settings table may be blank.
 
 
 
 ===== Add the Remote Out Group ID
 
-Insert a record into the `sys_syn_dblink.out_groups_def` table.  Supply the dblink connection name and the remote `out_group_id`.
+Insert a record into the `sys_syn_dblink.out_groups_def` table.  Supply the remote cluster_id and the remote `out_group_id`.
 
 [source,sql]
 ----
-INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_dblink-test', 'out');
 ----
 
 
@@ -242,7 +264,7 @@ When running the `sys_syn_dblink` procedures, the `dblink` connection must be op
 
 [source,sql]
 ----
-SELECT sys_syn_dblink.processing_table_create (
+SELECT sys_syn_dblink.proc_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',
@@ -258,7 +280,7 @@ Specify true to drop the put table.
 
 [source,sql]
 ----
-SELECT sys_syn_dblink.processing_table_drop ('test_table', 'out', false);
+SELECT sys_syn_dblink.proc_table_drop ('test_table', false);
 ----
 
 
@@ -274,7 +296,11 @@ Claiming the records ensures that `sys_syn` nor another `sys_syn_dblink` instanc
 
 [source,sql]
 ----
-SELECT * FROM processor_data.test_table_out_claim();
+SELECT  dblink_exec('sys_syn_test', 'BEGIN');
+
+SELECT * FROM processor_data.test_table_claim_1();
+
+SELECT  dblink_exec('sys_syn_test', 'COMMIT');
 ----
 
 A boolean is returned.  False indicates that there are no records to claim and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
@@ -287,7 +313,7 @@ This pulls the records across the `dblink` connection.
 
 [source,sql]
 ----
-SELECT * FROM processor_data.test_table_out_pull();
+SELECT * FROM processor_data.test_table_pull_1();
 ----
 
 A boolean is returned.  False indicates that there are no records in the queue and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
@@ -300,7 +326,7 @@ This processes the records.  The `dblink` connection is not used for this step.
 
 [source,sql]
 ----
-SELECT * FROM processor_data.test_table_out_process();
+SELECT * FROM processor_data.test_table_process_1();
 ----
 
 A boolean is returned.  False indicates that there were no records processed and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
@@ -313,7 +339,7 @@ This pushes the processing statuses (successes and/or failures) via the `dblink`
 
 [source,sql]
 ----
-SELECT * FROM processor_data.test_table_out_push_status();
+SELECT * FROM processor_data.test_table_push_status_1();
 ----
 
 A boolean is returned.  False indicates that there are no statuses to push.  True indicates that the statuses were pushed and that the queue was updated.
@@ -331,6 +357,10 @@ rule_group_id::
     NULL for a rule that applies to all tables.
 priority::
     The order that the rule is applied.
+proc_table_id_like::
+    The rule is applied to the column when the proc_table_id matches this `LIKE` pattern.
+cluster_id_like::
+    The rule is applied to the column when the cluster_id matches this `LIKE` pattern.
 in_table_id_like::
     The rule is applied to the column when the in_table_id matches this `LIKE` pattern.
 out_group_id_like::
@@ -357,6 +387,10 @@ column_name_like::
     The rule is applied to the column when the column name matches this `LIKE` pattern.
 data_type_like::
     The rule is applied to the column when the data type matches this `LIKE` pattern.
+primary_in_table_id_like::
+    The rule is applied to the column when the foreign or primary key points to an in_table_id that matches this `LIKE` pattern.  The primary_column_name_like column is required when this is used.
+primary_column_name_like::
+    The rule is applied to the column when the foreign or primary key points to a column_name that matches this `LIKE` pattern.  The primary_in_table_id_like column is required when this is used.
 new_data_type::
     Change the column's data type to this.
 new_in_column_type::
@@ -389,6 +423,8 @@ final_rule::
     Stop processing all rules after this one.
 delta_types::
     Specify the delta types that this expression runs under.
+comments::
+    If you want to add comments about this rule in this table, add them in this column.
 
 
 

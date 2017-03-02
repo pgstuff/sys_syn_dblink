@@ -19,8 +19,8 @@ SELECT dblink_exec('sys_syn_test', 'BEGIN');
  BEGIN
 (1 row)
 
-INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
-INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_dblink-test', 'out');
 INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
 INSERT INTO sys_syn_dblink.put_table_transforms (
         priority,       put_group_id_like,      new_put_schema
@@ -32,31 +32,31 @@ INSERT INTO sys_syn_dblink.put_table_transforms (
 ) VALUES (
         160,            'sys_syn_test',         'in',                   'sys_syn_proc'
 );
-SELECT sys_syn_dblink.processing_table_create (
+SELECT sys_syn_dblink.proc_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table',
         out_group_id    => 'out',
         put_group_id    => 'put',
         dblink_connname => 'sys_syn_test');
- processing_table_create 
--------------------------
+ proc_table_create 
+-------------------
  
 (1 row)
 
-SELECT * FROM sys_syn_proc.test_table_out_0_claim();
- test_table_out_0_claim 
-------------------------
+SELECT * FROM sys_syn_proc.test_table_claim_1();
+ test_table_claim_1 
+--------------------
  t
 (1 row)
 
-SELECT * FROM sys_syn_proc.test_table_out_0_pull();
- test_table_out_0_pull 
------------------------
+SELECT * FROM sys_syn_proc.test_table_pull_1();
+ test_table_pull_1 
+-------------------
  t
 (1 row)
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    sys_syn_proc.test_table_out_0_processing
+FROM    sys_syn_proc.test_table_processing_1
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |   attributes    | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------+---------
@@ -65,14 +65,14 @@ ORDER BY id, attributes;
            1 | Add        |                |              |                         |                      |                        | (3) | ("test_data 3") | 
 (3 rows)
 
-SELECT * FROM sys_syn_proc.test_table_out_0_process();
- test_table_out_0_process 
---------------------------
+SELECT * FROM sys_syn_proc.test_table_process_1();
+ test_table_process_1 
+----------------------
  t
 (1 row)
 
 SELECT  *
-FROM    put.test_table_out
+FROM    put.test_table
 ORDER BY test_table_id, test_table_text;
  test_table_id | test_table_text 
 ---------------+-----------------
@@ -82,7 +82,7 @@ ORDER BY test_table_id, test_table_text;
 (3 rows)
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    sys_syn_proc.test_table_out_0_processed
+FROM    sys_syn_proc.test_table_processed_1
 ORDER BY id;
  hold_reason_id | hold_reason_text | queue_priority 
 ----------------+------------------+----------------

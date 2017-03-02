@@ -1,0 +1,94 @@
+BEGIN;
+CREATE EXTENSION sys_syn_dblink;
+CREATE SCHEMA processor_data
+        AUTHORIZATION postgres;
+SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
+ dblink_connect 
+----------------
+ OK
+(1 row)
+
+SELECT dblink_exec('sys_syn_test', 'BEGIN');
+ dblink_exec 
+-------------
+ BEGIN
+(1 row)
+
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_dblink-test', 'out');
+INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
+SELECT sys_syn_dblink.proc_table_create (
+        proc_schema     => 'processor_data',
+        in_table_id     => 'composite_key_table',
+        out_group_id    => 'out',
+        put_group_id    => 'put',
+        dblink_connname => 'sys_syn_test');
+ proc_table_create 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM processor_data.composite_key_table_claim_1();
+ composite_key_table_claim_1 
+-----------------------------
+ t
+(1 row)
+
+SELECT * FROM processor_data.composite_key_table_pull_1();
+ composite_key_table_pull_1 
+----------------------------
+ t
+(1 row)
+
+SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
+FROM    processor_data.composite_key_table_processing_1
+ORDER BY id, attributes;
+ trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text |      id       |        attributes         | no_diff 
+-------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+---------------+---------------------------+---------
+          11 | Add        |                |              |                         |                      |                        | (1,1,1,1,1,6) | (1-1,1-2,1-3,1-4,1-5,1-6) | 
+          11 | Add        |                |              |                         |                      |                        | (1,1,2,1,2,5) | (2-1,2-2,2-3,2-4,2-5,2-6) | 
+          11 | Add        |                |              |                         |                      |                        | (1,1,2,2,3,4) | (3-1,3-2,3-3,3-4,3-5,3-6) | 
+          11 | Add        |                |              |                         |                      |                        | (1,2,3,1,4,3) | (4-1,4-2,4-3,4-4,4-5,4-6) | 
+          11 | Add        |                |              |                         |                      |                        | (1,2,3,2,5,2) | (5-1,5-2,5-3,5-4,5-5,5-6) | 
+          11 | Add        |                |              |                         |                      |                        | (1,2,3,3,6,1) | (6-1,6-2,6-3,6-4,6-5,6-6) | 
+(6 rows)
+
+SELECT * FROM processor_data.composite_key_table_process_1();
+ composite_key_table_process_1 
+-------------------------------
+ t
+(1 row)
+
+SELECT  *
+FROM    composite_key_table
+ORDER BY key_1,  key_2,  key_3,  key_4;
+ key_1 | key_2 | key_3 | key_4 | key_5 | key_6 | data_1 | data_2 | data_3 | data_4 | data_5 | data_6 
+-------+-------+-------+-------+-------+-------+--------+--------+--------+--------+--------+--------
+     1 |     1 |     1 |     1 |     1 |     6 | 1-1    | 1-2    | 1-3    | 1-4    | 1-5    | 1-6
+     1 |     1 |     2 |     1 |     2 |     5 | 2-1    | 2-2    | 2-3    | 2-4    | 2-5    | 2-6
+     1 |     1 |     2 |     2 |     3 |     4 | 3-1    | 3-2    | 3-3    | 3-4    | 3-5    | 3-6
+     1 |     2 |     3 |     1 |     4 |     3 | 4-1    | 4-2    | 4-3    | 4-4    | 4-5    | 4-6
+     1 |     2 |     3 |     2 |     5 |     2 | 5-1    | 5-2    | 5-3    | 5-4    | 5-5    | 5-6
+     1 |     2 |     3 |     3 |     6 |     1 | 6-1    | 6-2    | 6-3    | 6-4    | 6-5    | 6-6
+(6 rows)
+
+SELECT * FROM processor_data.composite_key_table_push_status_1();
+ composite_key_table_push_status_1 
+-----------------------------------
+ t
+(1 row)
+
+SELECT dblink_exec('sys_syn_test', 'ROLLBACK');
+ dblink_exec 
+-------------
+ ROLLBACK
+(1 row)
+
+SELECT dblink_disconnect('sys_syn_test');
+ dblink_disconnect 
+-------------------
+ OK
+(1 row)
+
+ROLLBACK;

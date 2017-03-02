@@ -1,3 +1,4 @@
+CREATE EXTENSION pgcrypto;
 CREATE EXTENSION sys_syn;
 CREATE SCHEMA user_data
     AUTHORIZATION postgres;
@@ -34,13 +35,13 @@ SELECT user_data.test_table_pull(FALSE);
  t
 (1 row)
 
-SELECT user_data.test_table_out_move();
- test_table_out_move 
----------------------
+SELECT user_data.test_table_out_move_1();
+ test_table_out_move_1 
+-----------------------
  t
 (1 row)
 
-SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
+SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue_1;
  id  | delta_type | queue_state 
 -----+------------+-------------
  (1) | Add        | Unclaimed
@@ -48,6 +49,8 @@ SELECT id, delta_type, queue_state FROM user_data.test_table_out_queue;
  (3) | Add        | Unclaimed
 (3 rows)
 
+UPDATE  sys_syn.settings
+SET     cluster_id = 'sys_syn_dblink-test';
 CREATE EXTENSION hstore;
 CREATE EXTENSION dblink;
 CREATE TABLE public.test_data (
@@ -76,13 +79,13 @@ SELECT public.test_data_pull(FALSE);
  t
 (1 row)
 
-SELECT public.test_data_group_move();
- test_data_group_move 
-----------------------
+SELECT public.test_data_group_move_1();
+ test_data_group_move_1 
+------------------------
  t
 (1 row)
 
-SELECT id, delta_type, queue_state FROM public.test_data_group_queue;
+SELECT id, delta_type, queue_state FROM public.test_data_group_queue_1;
  id  | delta_type | queue_state 
 -----+------------+-------------
  (1) | Add        | Unclaimed
@@ -98,28 +101,30 @@ CREATE TABLE "User Data"."Test Table" (
         CONSTRAINT "Test Table_pid" PRIMARY KEY ("Test Table Id"));
 INSERT INTO sys_syn.in_groups_def VALUES ('In Group');
 SELECT sys_syn.in_table_create_sql('"User Data"."Test Table"'::regclass, 'In Group');
-                                            in_table_create_sql                                            
------------------------------------------------------------------------------------------------------------
- SELECT sys_syn.in_table_create(                                                                          +
-                 schema          => '"User Data"'::regnamespace,                                          +
-                 in_table_id     => 'Test Table',                                                         +
-                 in_group_id     => 'In Group',                                                           +
-                 in_pull_id      => NULL,                                                                 +
-                 in_columns      => ARRAY[                                                                +
-                        $COL$("Test Table Id","integer",Id,"in_source.\"Test Table Id\"",,,,)$COL$,       +
-                        $COL$("Test Table Text","text",Attribute,"in_source.\"Test Table Text\"",,,,)$COL$+
-                 ]::sys_syn.create_in_column[],                                                           +
-                 full_table_reference    => '"User Data"."Test Table"',                                   +
-                 changes_table_reference => NULL,                                                         +
-                 full_sql                => NULL,                                                         +
-                 changes_sql             => NULL,                                                         +
-                 full_pre_sql            => NULL,                                                         +
-                 changes_pre_sql         => NULL,                                                         +
-                 full_post_sql           => NULL,                                                         +
-                 changes_post_sql        => NULL,                                                         +
-                 enable_deletes_implied  => TRUE,                                                         +
-                 full_prepull_id         => NULL,                                                         +
-                 changes_prepull_id      => NULL                                                          +
+                                            in_table_create_sql                                             
+------------------------------------------------------------------------------------------------------------
+ SELECT  sys_syn.in_table_create(                                                                          +
+                 schema          => '"User Data"'::regnamespace,                                           +
+                 in_table_id     => 'Test Table',                                                          +
+                 in_group_id     => 'In Group',                                                            +
+                 in_pull_id      => NULL,                                                                  +
+                 in_columns      => ARRAY[                                                                 +
+                        $COL$("Test Table Id","integer",Id,"in_source.\"Test Table Id\"",,,,,)$COL$,       +
+                        $COL$("Test Table Text","text",Attribute,"in_source.\"Test Table Text\"",,,,,)$COL$+
+                 ]::sys_syn.create_in_column[],                                                            +
+                 full_table_reference    => '"User Data"."Test Table"',                                    +
+                 changes_table_reference => NULL,                                                          +
+                 full_sql                => NULL,                                                          +
+                 changes_sql             => NULL,                                                          +
+                 full_pre_sql            => NULL,                                                          +
+                 changes_pre_sql         => NULL,                                                          +
+                 full_post_sql           => NULL,                                                          +
+                 changes_post_sql        => NULL,                                                          +
+                 enable_deletes_implied  => TRUE,                                                          +
+                 full_prepull_id         => NULL,                                                          +
+                 changes_prepull_id      => NULL,                                                          +
+                 in_partitions           => ARRAY[                                                         +
+                         $PART$("",)$PART$]::sys_syn.create_in_partition[]                                 +
          );
 (1 row)
 
@@ -139,9 +144,9 @@ SELECT "User Data"."Test Table_pull"(FALSE);
  t
 (1 row)
 
-SELECT "User Data"."Test Table_Out Group_move"();
- Test Table_Out Group_move 
----------------------------
+SELECT "User Data"."Test Table_Out Group_move_1"();
+ Test Table_Out Group_move_1 
+-----------------------------
  t
 (1 row)
 
@@ -156,9 +161,9 @@ SELECT sys_syn.in_table_create (
                 'in',
                 NULL,
                 ARRAY[
-                       $COL$("test_table_array_id","integer",Id,"in_source.test_table_array_id",,,,)$COL$,
-                       $COL$("test_table_array_updated","timestamp with time zone",Attribute,"in_source.test_table_array_updated",1,,,)$COL$,
-                       $COL$("test_table_array_text","text",Attribute,"in_source.test_table_array_text",,,,)$COL$
+                       $COL$("test_table_array_id","integer",Id,"in_source.test_table_array_id",,,,,)$COL$,
+                       $COL$("test_table_array_updated","timestamp with time zone",Attribute,"in_source.test_table_array_updated",1,,,,)$COL$,
+                       $COL$("test_table_array_text","text",Attribute,"in_source.test_table_array_text",,,,,)$COL$
                 ]::sys_syn.create_in_column[],
                 'user_data.test_table_array',
                 NULL
@@ -186,13 +191,13 @@ SELECT user_data.test_table_array_pull(FALSE);
  t
 (1 row)
 
-SELECT user_data.test_table_array_out_move();
- test_table_array_out_move 
----------------------------
+SELECT user_data.test_table_array_out_move_1();
+ test_table_array_out_move_1 
+-----------------------------
  t
 (1 row)
 
-SELECT * FROM user_data.test_table_array_out_queue_data;
+SELECT * FROM user_data.test_table_array_out_queue_data_1;
  sys_syn_id | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_array_id |   test_table_array_updated   | test_table_array_text 
 ------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+---------------------+------------------------------+-----------------------
  (1)        |                   7 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                   1 | Thu Jan 01 19:04:05 2009 PST | test_data1 v1
@@ -214,11 +219,11 @@ SELECT sys_syn.in_table_create (
                 'in',
                 NULL,
                 ARRAY[
-                       $COL$("test_table_bitemporal_id","integer",Id,"in_source.test_table_bitemporal_id",,,,)$COL$,
-                       $COL$("test_table_bitemporal_updated","timestamp with time zone",Attribute,"in_source.test_table_bitemporal_updated",1,,,)$COL$,
-                       $COL$("test_table_bitemporal_start","date",Attribute,"in_source.test_table_bitemporal_start",2,,,)$COL$,
-                       $COL$("test_table_bitemporal_end","date",Attribute,"in_source.test_table_bitemporal_end",3,,,)$COL$,
-                       $COL$("test_table_bitemporal_text","text",Attribute,"in_source.test_table_bitemporal_text",,,,)$COL$
+                       $COL$("test_table_bitemporal_id","integer",Id,"in_source.test_table_bitemporal_id",,,,,)$COL$,
+                       $COL$("test_table_bitemporal_updated","timestamp with time zone",Attribute,"in_source.test_table_bitemporal_updated",1,,,,)$COL$,
+                       $COL$("test_table_bitemporal_start","date",Attribute,"in_source.test_table_bitemporal_start",2,,,,)$COL$,
+                       $COL$("test_table_bitemporal_end","date",Attribute,"in_source.test_table_bitemporal_end",3,,,,)$COL$,
+                       $COL$("test_table_bitemporal_text","text",Attribute,"in_source.test_table_bitemporal_text",,,,,)$COL$
                 ]::sys_syn.create_in_column[],
                 'user_data.test_table_bitemporal',
                 NULL
@@ -253,13 +258,13 @@ SELECT user_data.test_table_bitemporal_pull(FALSE);
  t
 (1 row)
 
-SELECT user_data.test_table_bitemporal_out_move();
- test_table_bitemporal_out_move 
---------------------------------
+SELECT user_data.test_table_bitemporal_out_move_1();
+ test_table_bitemporal_out_move_1 
+----------------------------------
  t
 (1 row)
 
-SELECT * FROM user_data.test_table_bitemporal_out_queue_data;
+SELECT * FROM user_data.test_table_bitemporal_out_queue_data_1;
  sys_syn_id | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_bitemporal_id | test_table_bitemporal_updated | test_table_bitemporal_start | test_table_bitemporal_end |       test_table_bitemporal_text       
 ------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+--------------------------+-------------------------------+-----------------------------+---------------------------+----------------------------------------
  (1)        |                   9 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                        1 | Thu Jan 01 19:04:05 2009 PST  | 01-03-2009                  | 12-31-9999                | test_data1 no changes
@@ -274,4 +279,239 @@ SELECT * FROM user_data.test_table_bitemporal_out_queue_data;
  (5)        |                   9 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               3 |                        5 | Tue Jan 01 19:04:05 2013 PST  | 03-01-2009                  | 12-31-9999                | test_data5 v3 forward period_2 change
  (5)        |                   9 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               4 |                        5 | Wed Jan 01 19:04:05 2014 PST  | 02-01-2009                  | 12-31-9999                | test_data5 v4 backdate period_2 change
 (11 rows)
+
+CREATE TABLE user_data.composite_key_table (
+        key_1   integer         NOT NULL,
+        key_2   bigint          NOT NULL,
+        key_3   smallint        NOT NULL,
+        key_4   smallint        NOT NULL,
+        key_5   smallint        NOT NULL,
+        key_6   smallint        NOT NULL,
+        data_1  text,
+        data_2  text,
+        data_3  text,
+        data_4  text,
+        data_5  text,
+        data_6  text,
+        CONSTRAINT composite_key_table_pid PRIMARY KEY (key_1, key_2, key_3, key_4, key_5, key_6));
+DO $$BEGIN
+        EXECUTE sys_syn.in_table_create_sql('user_data.composite_key_table'::regclass, 'in');
+END$$;
+INSERT INTO user_data.composite_key_table(
+        key_1,  key_2,  key_3,  key_4,  key_5,  key_6,  data_1, data_2, data_3, data_4, data_5, data_6)
+VALUES (1,      1,      1,      1,      1,      6,      '1-1',  '1-2',  '1-3',  '1-4',  '1-5',  '1-6'), (
+        1,      1,      2,      1,      2,      5,      '2-1',  '2-2',  '2-3',  '2-4',  '2-5',  '2-6'), (
+        1,      1,      2,      2,      3,      4,      '3-1',  '3-2',  '3-3',  '3-4',  '3-5',  '3-6'), (
+        1,      2,      3,      1,      4,      3,      '4-1',  '4-2',  '4-3',  '4-4',  '4-5',  '4-6'), (
+        1,      2,      3,      2,      5,      2,      '5-1',  '5-2',  '5-3',  '5-4',  '5-5',  '5-6'), (
+        1,      2,      3,      3,      6,      1,      '6-1',  '6-2',  '6-3',  '6-4',  '6-5',  '6-6');
+SELECT sys_syn.out_table_create('user_data', 'composite_key_table', 'out', data_view => TRUE);
+ out_table_create 
+------------------
+ 
+(1 row)
+
+SELECT user_data.composite_key_table_pull(FALSE);
+ composite_key_table_pull 
+--------------------------
+ t
+(1 row)
+
+SELECT user_data.composite_key_table_out_move_1();
+ composite_key_table_out_move_1 
+--------------------------------
+ t
+(1 row)
+
+SELECT id, delta_type, queue_state FROM user_data.composite_key_table_out_queue_1;
+      id       | delta_type | queue_state 
+---------------+------------+-------------
+ (1,1,1,1,1,6) | Add        | Unclaimed
+ (1,1,2,1,2,5) | Add        | Unclaimed
+ (1,1,2,2,3,4) | Add        | Unclaimed
+ (1,2,3,1,4,3) | Add        | Unclaimed
+ (1,2,3,2,5,2) | Add        | Unclaimed
+ (1,2,3,3,6,1) | Add        | Unclaimed
+(6 rows)
+
+SELECT sys_syn.in_table_create (
+                'user_data',
+                'composite_key_array',
+                'in',
+                NULL,
+                ARRAY[
+                       $COL$("key_1","integer",Id,"in_source.key_1",,,,,)$COL$,
+                       $COL$("key_2","integer",Id,"in_source.key_2",,,,,)$COL$,
+                       $COL$("key_3","integer",Id,"in_source.key_3",,,,,)$COL$,
+                       $COL$("key_4","text",Attribute,"in_source.key_4",1,,,,)$COL$,
+                       $COL$("key_5","text",Attribute,"in_source.key_5",2,,,,)$COL$,
+                       $COL$("key_6","text",Attribute,"in_source.key_6",3,,,,)$COL$,
+                       $COL$("data_1","text",Attribute,"in_source.data_1",,,,,)$COL$,
+                       $COL$("data_2","text",Attribute,"in_source.data_2",,,,,)$COL$,
+                       $COL$("data_3","text",Attribute,"in_source.data_3",,,,,)$COL$,
+                       $COL$("data_4","text",Attribute,"in_source.data_4",,,,,)$COL$,
+                       $COL$("data_5","text",Attribute,"in_source.data_5",,,,,)$COL$,
+                       $COL$("data_6","text",Attribute,"in_source.data_6",,,,,)$COL$
+                ]::sys_syn.create_in_column[],
+                'user_data.composite_key_table',
+                NULL
+        );
+ in_table_create 
+-----------------
+ 
+(1 row)
+
+SELECT sys_syn.out_table_create('user_data', 'composite_key_array', 'out', data_view => TRUE);
+ out_table_create 
+------------------
+ 
+(1 row)
+
+SELECT user_data.composite_key_array_pull(FALSE);
+ composite_key_array_pull 
+--------------------------
+ t
+(1 row)
+
+SELECT user_data.composite_key_array_out_move_1();
+ composite_key_array_out_move_1 
+--------------------------------
+ t
+(1 row)
+
+SELECT * FROM user_data.composite_key_array_out_queue_data_1;
+ sys_syn_id | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | key_1 | key_2 | key_3 | key_4 | key_5 | key_6 | data_1 | data_2 | data_3 | data_4 | data_5 | data_6 
+------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+-------+-------+-------+-------+-------+-------+--------+--------+--------+--------+--------+--------
+ (1,1,1)    |                  13 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |     1 |     1 |     1 | 1     | 1     | 6     | 1-1    | 1-2    | 1-3    | 1-4    | 1-5    | 1-6
+ (1,1,2)    |                  13 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |     1 |     1 |     2 | 1     | 2     | 5     | 2-1    | 2-2    | 2-3    | 2-4    | 2-5    | 2-6
+ (1,1,2)    |                  13 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |     1 |     1 |     2 | 2     | 3     | 4     | 3-1    | 3-2    | 3-3    | 3-4    | 3-5    | 3-6
+ (1,2,3)    |                  13 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |     1 |     2 |     3 | 1     | 4     | 3     | 4-1    | 4-2    | 4-3    | 4-4    | 4-5    | 4-6
+ (1,2,3)    |                  13 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |     1 |     2 |     3 | 2     | 5     | 2     | 5-1    | 5-2    | 5-3    | 5-4    | 5-5    | 5-6
+ (1,2,3)    |                  13 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               3 |     1 |     2 |     3 | 3     | 6     | 1     | 6-1    | 6-2    | 6-3    | 6-4    | 6-5    | 6-6
+(6 rows)
+
+CREATE TABLE user_data.parent_table (
+        parent_table_id integer NOT NULL,
+        parent_table_text text,
+        CONSTRAINT parent_table_pid PRIMARY KEY (parent_table_id));
+CREATE TABLE user_data.child_table (
+        child_table_id integer NOT NULL,
+        parent_table_id integer,
+        CONSTRAINT child_table_pid PRIMARY KEY (child_table_id));
+DO $$BEGIN
+        EXECUTE sys_syn.in_table_create_sql('user_data.parent_table'::regclass, 'in');
+END$$;
+SELECT sys_syn.in_table_create (
+                schema          => 'user_data',
+                in_table_id     => 'child_table',
+                in_group_id     => 'in',
+                in_pull_id      => NULL,
+                in_columns      => ARRAY[
+                       $COL$("child_table_id","integer",Id,"in_source.child_table_id",,,,,)$COL$,
+                       $COL$("parent_table_id","integer",Attribute,"in_source.parent_table_id",,1,"parent_table","parent_table_id",)$COL$
+                ]::sys_syn.create_in_column[],
+                full_table_reference    => 'user_data.child_table'
+        );
+ in_table_create 
+-----------------
+ 
+(1 row)
+
+INSERT INTO user_data.parent_table(
+        parent_table_id,       parent_table_text)
+VALUES (1,                      'parent_data');
+INSERT INTO user_data.child_table(
+        child_table_id,        parent_table_id)
+VALUES (2,                      1);
+SELECT sys_syn.out_table_create('user_data', 'parent_table', 'out', data_view => TRUE);
+ out_table_create 
+------------------
+ 
+(1 row)
+
+SELECT sys_syn.out_table_create('user_data', 'child_table', 'out', data_view => TRUE);
+ out_table_create 
+------------------
+ 
+(1 row)
+
+ALTER TABLE user_data.parent_table_out_queue_1
+  ADD FOREIGN KEY (trans_id_in, id) REFERENCES user_data.parent_table_in_1 (trans_id_in, id) ON UPDATE RESTRICT ON DELETE RESTRICT;
+SELECT user_data.parent_table_pull(FALSE);
+ parent_table_pull 
+-------------------
+ t
+(1 row)
+
+SELECT user_data.parent_table_out_move_1();
+ parent_table_out_move_1 
+-------------------------
+ t
+(1 row)
+
+CREATE TABLE user_data.test_table_part (
+        test_table_id integer NOT NULL,
+        test_table_text text,
+        CONSTRAINT test_table_part_pid PRIMARY KEY (test_table_id));
+DO $$BEGIN
+        EXECUTE sys_syn.in_table_create_sql('user_data.test_table_part'::regclass, 'in', in_partition_count => 3::smallint);
+END$$;
+SELECT sys_syn.out_table_create('user_data', 'test_table_part', 'out', data_view => TRUE);
+ out_table_create 
+------------------
+ 
+(1 row)
+
+INSERT INTO user_data.test_table_part(
+        test_table_id,          test_table_text)
+SELECT  generate_series,        'test_data ' || generate_series
+FROM    generate_series(1, 10);
+SELECT user_data.test_table_part_pull(FALSE);
+ test_table_part_pull 
+----------------------
+ t
+(1 row)
+
+SELECT user_data.test_table_part_out_move_1();
+ test_table_part_out_move_1 
+----------------------------
+ t
+(1 row)
+
+SELECT user_data.test_table_part_out_move_2();
+ test_table_part_out_move_2 
+----------------------------
+ t
+(1 row)
+
+SELECT user_data.test_table_part_out_move_3();
+ test_table_part_out_move_3 
+----------------------------
+ t
+(1 row)
+
+SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_1;
+  id  | delta_type | queue_state 
+------+------------+-------------
+ (2)  | Add        | Unclaimed
+ (5)  | Add        | Unclaimed
+ (7)  | Add        | Unclaimed
+ (8)  | Add        | Unclaimed
+ (10) | Add        | Unclaimed
+(5 rows)
+
+SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_2;
+ id  | delta_type | queue_state 
+-----+------------+-------------
+ (4) | Add        | Unclaimed
+ (9) | Add        | Unclaimed
+(2 rows)
+
+SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_3;
+ id  | delta_type | queue_state 
+-----+------------+-------------
+ (1) | Add        | Unclaimed
+ (3) | Add        | Unclaimed
+ (6) | Add        | Unclaimed
+(3 rows)
 

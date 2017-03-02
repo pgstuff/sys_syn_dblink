@@ -64,35 +64,35 @@ ALTER TYPE sys_syn_dblink.exception_trap OWNER TO postgres;
 
 
 CREATE TABLE sys_syn_dblink.out_groups_def (
-        dblink_connname         text NOT NULL,
+        cluster_id              text NOT NULL,
         out_group_id            text NOT NULL,
-        parent_dblink_connname  text,
+        parent_cluster_id       text,
         parent_out_group_id     text,
         rule_group_ids          text[],
         comments                text DEFAULT '' NOT NULL
 );
 ALTER TABLE sys_syn_dblink.out_groups_def OWNER TO postgres;
 ALTER TABLE ONLY sys_syn_dblink.out_groups_def
-        ADD CONSTRAINT out_groups_def_pkey PRIMARY KEY (dblink_connname, out_group_id);
+        ADD CONSTRAINT out_groups_def_pkey PRIMARY KEY (cluster_id, out_group_id);
 ALTER TABLE sys_syn_dblink.out_groups_def
-        ADD CONSTRAINT out_groups_def_parent_fkey FOREIGN KEY (parent_dblink_connname, parent_out_group_id)
-                REFERENCES sys_syn_dblink.out_groups_def (dblink_connname, out_group_id) MATCH SIMPLE
+        ADD CONSTRAINT out_groups_def_parent_fkey FOREIGN KEY (parent_cluster_id, parent_out_group_id)
+                REFERENCES sys_syn_dblink.out_groups_def (cluster_id, out_group_id) MATCH SIMPLE
                 ON UPDATE RESTRICT ON DELETE NO ACTION;
 
 CREATE TABLE sys_syn_dblink.in_groups_def (
-        dblink_connname         text NOT NULL,
+        cluster_id              text NOT NULL,
         in_group_id             text NOT NULL,
-        parent_dblink_connname  text,
+        parent_cluster_id       text,
         parent_in_group_id      text,
         rule_group_ids          text[],
         comments                text DEFAULT '' NOT NULL
 );
 ALTER TABLE sys_syn_dblink.in_groups_def OWNER TO postgres;
 ALTER TABLE ONLY sys_syn_dblink.in_groups_def
-        ADD CONSTRAINT in_groups_def_pkey PRIMARY KEY (dblink_connname, in_group_id);
+        ADD CONSTRAINT in_groups_def_pkey PRIMARY KEY (cluster_id, in_group_id);
 ALTER TABLE sys_syn_dblink.in_groups_def
-        ADD CONSTRAINT in_groups_def_parent_fkey FOREIGN KEY (parent_dblink_connname, parent_in_group_id)
-                REFERENCES sys_syn_dblink.in_groups_def (dblink_connname, in_group_id) MATCH SIMPLE
+        ADD CONSTRAINT in_groups_def_parent_fkey FOREIGN KEY (parent_cluster_id, parent_in_group_id)
+                REFERENCES sys_syn_dblink.in_groups_def (cluster_id, in_group_id) MATCH SIMPLE
                 ON UPDATE RESTRICT ON DELETE NO ACTION;
 
 CREATE TABLE sys_syn_dblink.put_groups_def (
@@ -125,6 +125,8 @@ ALTER TABLE sys_syn_dblink.table_types_def OWNER TO postgres;
 CREATE TABLE sys_syn_dblink.put_table_transforms (
         rule_group_id           text,
         priority                smallint NOT NULL,
+        proc_table_id_like      text,
+        cluster_id_like         text,
         in_table_id_like        text,
         out_group_id_like       text,
         in_group_id_like        text,
@@ -156,12 +158,15 @@ ALTER TABLE sys_syn_dblink.put_table_transforms OWNER TO postgres;
 ALTER TABLE sys_syn_dblink.put_table_transforms
         ADD CONSTRAINT priority_disallow_sign CHECK (priority >= 0);
 CREATE UNIQUE INDEX ON sys_syn_dblink.put_table_transforms (
-        priority, in_table_id_like, out_group_id_like, in_group_id_like, proc_schema_like, put_schema_like, put_table_name_like,
-        table_type_id_like, attributes_array, dblink_connname_like, remote_schema_like/*, queue_id*/);
+        priority, proc_table_id_like, cluster_id_like, in_table_id_like, out_group_id_like, in_group_id_like, proc_schema_like,
+        put_schema_like, put_table_name_like, table_type_id_like, attributes_array, dblink_connname_like, remote_schema_like/*,
+        queue_id*/);
 
 CREATE TABLE sys_syn_dblink.put_column_transforms (
         rule_group_id           text,
         priority                smallint NOT NULL,
+        proc_table_id_like      text,
+        cluster_id_like         text,
         in_table_id_like        text,
         out_group_id_like       text,
         in_group_id_like        text,
@@ -177,6 +182,8 @@ CREATE TABLE sys_syn_dblink.put_column_transforms (
         in_column_type          sys_syn_dblink.in_column_type,
         column_name_like        text,
         data_type_like          text,
+        primary_in_table_id_like text,
+        primary_column_name_like text,
         new_data_type           text,
         new_in_column_type      sys_syn_dblink.in_column_type,
         new_column_name         text,
@@ -199,96 +206,111 @@ ALTER TABLE sys_syn_dblink.put_column_transforms OWNER TO postgres;
 ALTER TABLE sys_syn_dblink.put_column_transforms
         ADD CONSTRAINT priority_disallow_sign CHECK (priority >= 0);
 CREATE UNIQUE INDEX ON sys_syn_dblink.put_column_transforms (
-        priority, in_table_id_like, out_group_id_like, in_group_id_like, proc_schema_like, put_schema_like, put_table_name_like,
-        table_type_id_like, attributes_array, dblink_connname_like, remote_schema_like, /*queue_id,*/ in_column_type,
-        column_name_like, data_type_like);
+        priority, proc_table_id_like, cluster_id_like, out_group_id_like, in_group_id_like, proc_schema_like, put_schema_like,
+        put_table_name_like, table_type_id_like, attributes_array, dblink_connname_like, remote_schema_like, /*queue_id,*/
+        in_column_type, column_name_like, data_type_like);
 
-CREATE TABLE sys_syn_dblink.processing_tables_def (
+CREATE TABLE sys_syn_dblink.proc_tables_def (
         proc_schema             regnamespace    NOT NULL,
+        proc_table_id           text            NOT NULL,
+        cluster_id              text            NOT NULL,
+        dblink_connname         text            NOT NULL,
+        remote_schema           text            NOT NULL,
         in_table_id             text            NOT NULL,
-        out_group_id            text            NOT NULL,
         in_group_id             text            NOT NULL,
+        attributes_array        boolean         NOT NULL,
+        out_group_id            text            NOT NULL,
         put_group_id            text            NOT NULL,
         put_schema              regnamespace    NOT NULL,
         put_table_name          text            NOT NULL,
         table_type_id           text            NOT NULL,
-        attributes_array        boolean         NOT NULL,
         table_settings          hstore          NOT NULL,
-        dblink_connname         text            NOT NULL,
-        remote_schema           text            NOT NULL,
         hold_cache_min_rows     int             NOT NULL,
         remote_status_batch_rows bigint         NOT NULL,
+        queue_count             smallint,
 /*      queue_id                smallint,*/
         comments                text DEFAULT '' NOT NULL,
-        CONSTRAINT processing_tables_def_pkey PRIMARY KEY (in_table_id, out_group_id)
+        CONSTRAINT proc_tables_def_pkey PRIMARY KEY (proc_table_id)
 );
-ALTER TABLE sys_syn_dblink.processing_tables_def OWNER TO postgres;
-ALTER TABLE ONLY sys_syn_dblink.processing_tables_def
-        ADD CONSTRAINT processing_tables_def_in_group_id_fkey FOREIGN KEY (dblink_connname, in_group_id)
-                REFERENCES sys_syn_dblink.in_groups_def(dblink_connname, in_group_id)
+ALTER TABLE sys_syn_dblink.proc_tables_def OWNER TO postgres;
+ALTER TABLE ONLY sys_syn_dblink.proc_tables_def
+        ADD CONSTRAINT proc_tables_def_in_group_id_fkey FOREIGN KEY (cluster_id, in_group_id)
+                REFERENCES sys_syn_dblink.in_groups_def(cluster_id, in_group_id)
                 ON UPDATE RESTRICT ON DELETE RESTRICT;
-ALTER TABLE ONLY sys_syn_dblink.processing_tables_def
-        ADD CONSTRAINT processing_tables_def_out_group_id_fkey FOREIGN KEY (dblink_connname, out_group_id)
-                REFERENCES sys_syn_dblink.out_groups_def(dblink_connname, out_group_id)
+ALTER TABLE ONLY sys_syn_dblink.proc_tables_def
+        ADD CONSTRAINT proc_tables_def_out_group_id_fkey FOREIGN KEY (cluster_id, out_group_id)
+                REFERENCES sys_syn_dblink.out_groups_def(cluster_id, out_group_id)
                 ON UPDATE RESTRICT ON DELETE RESTRICT;
-ALTER TABLE ONLY sys_syn_dblink.processing_tables_def
-        ADD CONSTRAINT processing_tables_def_put_group_id_fkey FOREIGN KEY (put_group_id)
+ALTER TABLE ONLY sys_syn_dblink.proc_tables_def
+        ADD CONSTRAINT proc_tables_def_put_group_id_fkey FOREIGN KEY (put_group_id)
                 REFERENCES sys_syn_dblink.put_groups_def(put_group_id)
                 ON UPDATE RESTRICT ON DELETE RESTRICT;
-ALTER TABLE ONLY sys_syn_dblink.processing_tables_def
-        ADD CONSTRAINT processing_tables_def_table_type_id_fkey FOREIGN KEY (table_type_id, attributes_array)
+ALTER TABLE ONLY sys_syn_dblink.proc_tables_def
+        ADD CONSTRAINT proc_tables_def_table_type_id_fkey FOREIGN KEY (table_type_id, attributes_array)
                 REFERENCES sys_syn_dblink.table_types_def(table_type_id, attributes_array)
                 ON UPDATE RESTRICT ON DELETE RESTRICT;
 
-CREATE TABLE sys_syn_dblink.processing_table_workers_def (
-        in_table_id             text            NOT NULL,
-        out_group_id            text            NOT NULL,
-        worker_id               smallint        NOT NULL,
-/*      partition_name          text            NOT NULL,*/
-        queue_id                smallint,
-        logged_tablespace       name,
-        unlogged_tablespace     name,
+CREATE TABLE sys_syn_dblink.proc_partitions_def (
+        proc_table_id           text            NOT NULL,
+        partition_id            smallint        NOT NULL,
         comments                text            NOT NULL DEFAULT ''
 );
-ALTER TABLE sys_syn_dblink.processing_table_workers_def OWNER TO postgres;
-ALTER TABLE ONLY sys_syn_dblink.processing_table_workers_def
-        ADD CONSTRAINT processing_table_workers_def_pkey PRIMARY KEY (in_table_id, out_group_id, worker_id);
-ALTER TABLE sys_syn_dblink.processing_table_workers_def
-  ADD CONSTRAINT processing_table_workers_def_in_table_id_out_group_id_fkey FOREIGN KEY (in_table_id, out_group_id)
-      REFERENCES sys_syn_dblink.processing_tables_def (in_table_id, out_group_id) MATCH SIMPLE
+ALTER TABLE sys_syn_dblink.proc_partitions_def OWNER TO postgres;
+ALTER TABLE ONLY sys_syn_dblink.proc_partitions_def
+        ADD CONSTRAINT proc_partitions_def_pkey PRIMARY KEY (proc_table_id, partition_id);
+ALTER TABLE sys_syn_dblink.proc_partitions_def
+  ADD CONSTRAINT proc_partitions_def_proc_table_id_fkey FOREIGN KEY (proc_table_id)
+      REFERENCES sys_syn_dblink.proc_tables_def (proc_table_id) MATCH SIMPLE
       ON UPDATE RESTRICT ON DELETE RESTRICT;
 
-CREATE TABLE sys_syn_dblink.processing_table_columns_def (
-        dblink_connname text            NOT NULL,
-        in_table_id     text            NOT NULL,
-        out_group_id    text            NOT NULL,
+CREATE TABLE sys_syn_dblink.proc_workers_def (
+        proc_table_id           text            NOT NULL,
+        partition_id            smallint        NOT NULL,
+        worker_id               smallint        NOT NULL,
+        logged_tablespace       name,
+        unlogged_tablespace     name,
+        node_id                 text,
+        queue_id                smallint,
+        comments                text            NOT NULL DEFAULT ''
+);
+ALTER TABLE sys_syn_dblink.proc_workers_def OWNER TO postgres;
+ALTER TABLE ONLY sys_syn_dblink.proc_workers_def
+        ADD CONSTRAINT proc_workers_def_pkey PRIMARY KEY (proc_table_id, worker_id);
+ALTER TABLE sys_syn_dblink.proc_workers_def
+  ADD CONSTRAINT proc_workers_def_proc_table_id_fkey FOREIGN KEY (proc_table_id, partition_id)
+      REFERENCES sys_syn_dblink.proc_partitions_def (proc_table_id, partition_id) MATCH SIMPLE
+      ON UPDATE RESTRICT ON DELETE RESTRICT;
+
+CREATE TABLE sys_syn_dblink.proc_columns_def (
+        proc_table_id   text            NOT NULL,
         column_name     text            NOT NULL,
         in_column_type  sys_syn_dblink.in_column_type,
         format_type     text            NOT NULL,
         column_ordinal  smallint        NOT NULL,
         array_order     smallint,
-        CONSTRAINT processing_table_columns_def_pkey PRIMARY KEY (dblink_connname, in_table_id, out_group_id, column_name)
+        CONSTRAINT proc_columns_def_pkey PRIMARY KEY (proc_table_id, column_name)
 );
-ALTER TABLE sys_syn_dblink.processing_table_columns_def OWNER TO postgres;
+ALTER TABLE sys_syn_dblink.proc_columns_def OWNER TO postgres;
 
-CREATE TABLE sys_syn_dblink.processing_foreign_keys (
-        dblink_connname         text    NOT NULL,
-        primary_table_id        text    NOT NULL,
-        foreign_table_id        text    NOT NULL,
-        foreign_out_group_id    text    NOT NULL,
+CREATE TABLE sys_syn_dblink.proc_foreign_keys (
+        cluster_id              text    NOT NULL,
+        foreign_proc_table_id   text    NOT NULL,
         foreign_key_index       smallint NOT NULL,
-        primary_column_name     text    NOT NULL,
-        foreign_column_name     text    NOT NULL
+        primary_in_table_id     text    NOT NULL,
+        foreign_column_name     text    NOT NULL,
+        primary_column_name     text    NOT NULL
 );
-ALTER TABLE sys_syn_dblink.processing_foreign_keys OWNER TO postgres;
-ALTER TABLE ONLY sys_syn_dblink.processing_foreign_keys
-        ADD CONSTRAINT processing_foreign_keys_pkey
-                PRIMARY KEY (dblink_connname, primary_table_id, foreign_table_id, foreign_out_group_id, foreign_key_index,
-                        primary_column_name, foreign_column_name);
-ALTER TABLE sys_syn_dblink.processing_foreign_keys
-        ADD CONSTRAINT processing_foreign_keys_primary_fkey FOREIGN KEY (dblink_connname, primary_table_id, foreign_out_group_id,
-                primary_column_name)
-                REFERENCES sys_syn_dblink.processing_table_columns_def (dblink_connname, in_table_id, out_group_id, column_name)
+ALTER TABLE sys_syn_dblink.proc_foreign_keys OWNER TO postgres;
+ALTER TABLE ONLY sys_syn_dblink.proc_foreign_keys
+        ADD CONSTRAINT proc_foreign_keys_pkey
+                PRIMARY KEY (cluster_id, foreign_proc_table_id, foreign_key_index, foreign_column_name);
+ALTER TABLE sys_syn_dblink.proc_foreign_keys
+        ADD CONSTRAINT proc_foreign_keys_primary_fkey FOREIGN KEY (foreign_proc_table_id, foreign_column_name)
+                REFERENCES sys_syn_dblink.proc_columns_def (proc_table_id, column_name)
+                MATCH SIMPLE ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE sys_syn_dblink.proc_foreign_keys
+        ADD CONSTRAINT proc_foreign_keys_proc_table_id_fkey FOREIGN KEY (foreign_proc_table_id)
+                REFERENCES sys_syn_dblink.proc_tables_def (proc_table_id)
                 MATCH SIMPLE ON UPDATE RESTRICT ON DELETE RESTRICT;
 
 
@@ -338,6 +360,103 @@ VALUES ('sys_syn-direct',                       false,
         $$);
 
 
+
+CREATE FUNCTION sys_syn_dblink.table_types_def_check_new () RETURNS TRIGGER AS $$
+BEGIN
+        IF NEW.table_type_id LIKE 'sys_syn%' THEN
+                RAISE EXCEPTION 'Rules starting with sys_syn are reserved for the sys_syn_dblink extension.'
+                USING HINT = 'Choose a table_type_id that does not begin with sys_syn.';
+        END IF;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION sys_syn_dblink.table_types_def_check_new() OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.table_types_def_check_old () RETURNS TRIGGER AS $$
+BEGIN
+        IF OLD.table_type_id LIKE 'sys_syn%' THEN
+                RAISE EXCEPTION 'Rules starting with sys_syn are reserved for the sys_syn_dblink extension.'
+                USING HINT = 'Choose a table_type_id that does not begin with sys_syn.';
+        END IF;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION sys_syn_dblink.table_types_def_check_old() OWNER TO postgres;
+
+CREATE CONSTRAINT TRIGGER table_types_def_check_new
+        AFTER INSERT OR UPDATE ON sys_syn_dblink.table_types_def
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE PROCEDURE sys_syn_dblink.table_types_def_check_new();
+
+CREATE CONSTRAINT TRIGGER table_types_def_check_old
+        AFTER DELETE ON sys_syn_dblink.table_types_def
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE PROCEDURE sys_syn_dblink.table_types_def_check_old();
+CREATE FUNCTION sys_syn_dblink.put_table_transforms_check_new () RETURNS TRIGGER AS $$
+BEGIN
+        IF NEW.rule_group_id LIKE 'sys_syn%' THEN
+                RAISE EXCEPTION 'Rules starting with sys_syn are reserved for the sys_syn_dblink extension.'
+                USING HINT = 'Choose a rule_group_id that does not begin with sys_syn.';
+        END IF;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION sys_syn_dblink.put_table_transforms_check_new() OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.put_table_transforms_check_old () RETURNS TRIGGER AS $$
+BEGIN
+        IF OLD.rule_group_id LIKE 'sys_syn%' THEN
+                RAISE EXCEPTION 'Rules starting with sys_syn are reserved for the sys_syn_dblink extension.'
+                USING HINT = 'Choose a rule_group_id that does not begin with sys_syn.';
+        END IF;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION sys_syn_dblink.put_table_transforms_check_old() OWNER TO postgres;
+
+CREATE CONSTRAINT TRIGGER put_table_transforms_check_new
+        AFTER INSERT OR UPDATE ON sys_syn_dblink.put_table_transforms
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE PROCEDURE sys_syn_dblink.put_table_transforms_check_new();
+
+CREATE CONSTRAINT TRIGGER put_table_transforms_check_old
+        AFTER DELETE ON sys_syn_dblink.put_table_transforms
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE PROCEDURE sys_syn_dblink.put_table_transforms_check_old();
+CREATE FUNCTION sys_syn_dblink.put_column_transforms_check_new () RETURNS TRIGGER AS $$
+BEGIN
+        IF NEW.rule_group_id LIKE 'sys_syn%' THEN
+                RAISE EXCEPTION 'Rules starting with sys_syn are reserved for the sys_syn_dblink extension.'
+                USING HINT = 'Choose a rule_group_id that does not begin with sys_syn.';
+        END IF;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION sys_syn_dblink.put_column_transforms_check_new() OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.put_column_transforms_check_old () RETURNS TRIGGER AS $$
+BEGIN
+        IF OLD.rule_group_id LIKE 'sys_syn%' THEN
+                RAISE EXCEPTION 'Rules starting with sys_syn are reserved for the sys_syn_dblink extension.'
+                USING HINT = 'Choose a rule_group_id that does not begin with sys_syn.';
+        END IF;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+ALTER FUNCTION sys_syn_dblink.put_column_transforms_check_old() OWNER TO postgres;
+
+CREATE CONSTRAINT TRIGGER put_column_transforms_check_new
+        AFTER INSERT OR UPDATE ON sys_syn_dblink.put_column_transforms
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE PROCEDURE sys_syn_dblink.put_column_transforms_check_new();
+
+CREATE CONSTRAINT TRIGGER put_column_transforms_check_old
+        AFTER DELETE ON sys_syn_dblink.put_column_transforms
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE PROCEDURE sys_syn_dblink.put_column_transforms_check_old();
+
+
+
 CREATE FUNCTION sys_syn_dblink.table_primary_key_name (proc_schema regnamespace, table_name text)
         RETURNS text AS
 $BODY$
@@ -371,12 +490,11 @@ ALTER FUNCTION sys_syn_dblink.table_primary_key_name(proc_schema regnamespace, t
   OWNER TO postgres;
 
 CREATE FUNCTION sys_syn_dblink.proc_columns_get (
-        in_table_id     text,
-        out_group_id    text)
+        proc_table_id   text)
   RETURNS sys_syn_dblink.create_proc_column[] AS
 $BODY$
 DECLARE
-        _processing_table_def           sys_syn_dblink.processing_tables_def;
+        _proc_table_def                 sys_syn_dblink.proc_tables_def;
         _column_type_id_name            TEXT;
         _column_type_attr_name          TEXT;
         _column_type_nodiff_name        TEXT;
@@ -386,24 +504,19 @@ DECLARE
         _return_column                  sys_syn_dblink.create_proc_column;
         _return_columns                 sys_syn_dblink.create_proc_column[];
 BEGIN
-        _processing_table_def := (
-                SELECT  processing_tables_def
-                FROM    sys_syn_dblink.processing_tables_def
-                WHERE   processing_tables_def.in_table_id = proc_columns_get.in_table_id AND
-                        processing_tables_def.out_group_id = proc_columns_get.out_group_id);
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = proc_columns_get.proc_table_id);
 
-        IF _processing_table_def IS NULL THEN
-                RAISE EXCEPTION 'Cannot find in_table_id ''%'' out_group_id ''%''.', proc_columns_get.in_table_id,
-                        proc_columns_get.out_group_id
-                USING HINT = 'Check the processing_tables_def table.';
+        IF _proc_table_def IS NULL THEN
+                RAISE EXCEPTION 'Cannot find proc_table_id ''%''', proc_columns_get.proc_table_id
+                USING HINT = 'Check the proc_tables_def table.';
         END IF;
 
-        _column_type_id_name            := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id ||
-                                                '_processing_id';
-        _column_type_attr_name          := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id ||
-                                                '_processing_attributes';
-        _column_type_nodiff_name        := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id ||
-                                                '_processing_attributes';
+        _column_type_id_name            := _proc_table_def.proc_table_id || '_proc_id';
+        _column_type_attr_name          := _proc_table_def.proc_table_id || '_proc_attributes';
+        _column_type_nodiff_name        := _proc_table_def.proc_table_id || '_proc_no_diff';
 
         _return_columns                 := ARRAY[]::sys_syn_dblink.create_proc_column[];
 
@@ -411,9 +524,9 @@ BEGIN
                 FROM    pg_catalog.pg_namespace JOIN
                         pg_catalog.pg_class ON
                                 pg_class.relnamespace = pg_namespace.oid
-                WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _processing_table_def.proc_schema AND
+                WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _proc_table_def.proc_schema AND
                         pg_class.relname = _column_type_id_name) = 0 THEN
-                RAISE EXCEPTION 'Cannot find type ''%''.''%''.', _processing_table_def.proc_schema::text, _column_type_id_name
+                RAISE EXCEPTION 'Cannot find type ''%''.''%''.', _proc_table_def.proc_schema::text, _column_type_id_name
                 USING HINT = 'Check the proc_schema and table names.';
         END IF;
 
@@ -430,7 +543,7 @@ BEGIN
                         pg_class.relnamespace = pg_namespace.oid JOIN
                 pg_catalog.pg_attribute ON
                         (pg_attribute.attrelid = pg_class.oid)
-        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _processing_table_def.proc_schema AND
+        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _proc_table_def.proc_schema AND
                 pg_class.relname IN (_column_type_id_name, _column_type_attr_name, _column_type_nodiff_name) AND
                 pg_attribute.attnum > 0 AND
                 NOT pg_attribute.attisdropped
@@ -447,12 +560,11 @@ BEGIN
                 _return_column.data_type            := _format_type;
                 _return_column.in_column_type       := _in_column_type;
 
-                SELECT  processing_table_columns_def.array_order
+                SELECT  proc_columns_def.array_order
                 INTO    _return_column.array_order
-                FROM    sys_syn_dblink.processing_table_columns_def
-                WHERE   processing_table_columns_def.in_table_id        = _processing_table_def.in_table_id AND
-                        processing_table_columns_def.out_group_id       = _processing_table_def.out_group_id AND
-                        processing_table_columns_def.column_name        = _column_name;
+                FROM    sys_syn_dblink.proc_columns_def
+                WHERE   proc_columns_def.proc_table_id    = _proc_table_def.proc_table_id AND
+                        proc_columns_def.column_name      = _column_name;
 
                 _return_columns := array_append(_return_columns, _return_column);
         END LOOP;
@@ -462,10 +574,10 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.proc_columns_get(text, text)
+ALTER FUNCTION sys_syn_dblink.proc_columns_get(text)
   OWNER TO postgres;
 
-CREATE FUNCTION sys_syn_dblink.rule_group_ids_get (_processing_table_def sys_syn_dblink.processing_tables_def)
+CREATE FUNCTION sys_syn_dblink.rule_group_ids_get (_proc_table_def sys_syn_dblink.proc_tables_def)
   RETURNS text[] AS
 $BODY$
 DECLARE
@@ -473,25 +585,25 @@ DECLARE
 BEGIN
         _rule_group_ids := COALESCE(
                 (
-                        WITH RECURSIVE all_transform_rule_group_ids(parent_dblink_connname, parent_in_group_id, rule_group_ids) AS (
-                                SELECT  in_groups_def.parent_dblink_connname,
+                        WITH RECURSIVE all_transform_rule_group_ids(parent_cluster_id, parent_in_group_id, rule_group_ids) AS (
+                                SELECT  in_groups_def.parent_cluster_id,
                                         in_groups_def.parent_in_group_id,
                                         in_groups_def.rule_group_ids
                                 FROM    sys_syn_dblink.in_groups_def
-                                WHERE   in_groups_def.dblink_connname   = _processing_table_def.dblink_connname AND
-                                        in_groups_def.in_group_id       = _processing_table_def.in_group_id
+                                WHERE   in_groups_def.cluster_id        = _proc_table_def.cluster_id AND
+                                        in_groups_def.in_group_id       = _proc_table_def.in_group_id
                                 UNION ALL
-                                SELECT  in_groups_def.parent_dblink_connname,
+                                SELECT  in_groups_def.parent_cluster_id,
                                         in_groups_def.parent_in_group_id,
                                         in_groups_def.rule_group_ids ||
                                                 all_transform_rule_group_ids.rule_group_ids
                                 FROM    sys_syn_dblink.in_groups_def, all_transform_rule_group_ids
-                                WHERE   in_groups_def.dblink_connname   = all_transform_rule_group_ids.parent_dblink_connname AND
+                                WHERE   in_groups_def.cluster_id        = all_transform_rule_group_ids.parent_cluster_id AND
                                         in_groups_def.in_group_id       = all_transform_rule_group_ids.parent_in_group_id
                         )
                         SELECT  rule_group_ids
                         FROM    all_transform_rule_group_ids
-                        WHERE   parent_dblink_connname  IS NULL AND
+                        WHERE   parent_cluster_id       IS NULL AND
                                 parent_in_group_id      IS NULL
                 ),
                 '{}'::text[]
@@ -499,25 +611,25 @@ BEGIN
 
         _rule_group_ids := _rule_group_ids || COALESCE(
                 (
-                        WITH RECURSIVE all_transform_rule_group_ids(parent_dblink_connname, parent_out_group_id, rule_group_ids) AS(
-                                SELECT  out_groups_def.parent_dblink_connname,
+                        WITH RECURSIVE all_transform_rule_group_ids(parent_cluster_id, parent_out_group_id, rule_group_ids) AS(
+                                SELECT  out_groups_def.parent_cluster_id,
                                         out_groups_def.parent_out_group_id,
                                         out_groups_def.rule_group_ids
                                 FROM    sys_syn_dblink.out_groups_def
-                                WHERE   out_groups_def.dblink_connname   = _processing_table_def.dblink_connname AND
-                                        out_groups_def.out_group_id      = _processing_table_def.out_group_id
+                                WHERE   out_groups_def.cluster_id       = _proc_table_def.cluster_id AND
+                                        out_groups_def.out_group_id     = _proc_table_def.out_group_id
                                 UNION ALL
-                                SELECT  out_groups_def.parent_dblink_connname,
+                                SELECT  out_groups_def.parent_cluster_id,
                                         out_groups_def.parent_out_group_id,
                                         out_groups_def.rule_group_ids ||
                                                 all_transform_rule_group_ids.rule_group_ids
                                 FROM    sys_syn_dblink.out_groups_def, all_transform_rule_group_ids
-                                WHERE   out_groups_def.dblink_connname  = all_transform_rule_group_ids.parent_dblink_connname AND
+                                WHERE   out_groups_def.cluster_id       = all_transform_rule_group_ids.parent_cluster_id AND
                                         out_groups_def.out_group_id     = all_transform_rule_group_ids.parent_out_group_id
                         )
                         SELECT  rule_group_ids
                         FROM    all_transform_rule_group_ids
-                        WHERE   parent_dblink_connname  IS NULL AND
+                        WHERE   parent_cluster_id       IS NULL AND
                                 parent_out_group_id     IS NULL
                 ),
                 '{}'::text[]
@@ -529,7 +641,7 @@ BEGIN
                                 SELECT  put_groups_def.parent_put_group_id,
                                         put_groups_def.rule_group_ids
                                 FROM    sys_syn_dblink.put_groups_def
-                                WHERE   put_groups_def.put_group_id = _processing_table_def.put_group_id
+                                WHERE   put_groups_def.put_group_id = _proc_table_def.put_group_id
                                 UNION ALL
                                 SELECT  put_groups_def.parent_put_group_id,
                                         put_groups_def.rule_group_ids ||
@@ -549,17 +661,16 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.rule_group_ids_get(sys_syn_dblink.processing_tables_def)
+ALTER FUNCTION sys_syn_dblink.rule_group_ids_get(sys_syn_dblink.proc_tables_def)
   OWNER TO postgres;
 
 CREATE FUNCTION sys_syn_dblink.put_columns_get (
-        in_table_id     text,
-        out_group_id    text,
+        proc_table_id   text,
         add_columns     sys_syn_dblink.create_put_column[])
   RETURNS sys_syn_dblink.create_put_column[] AS
 $BODY$
 DECLARE
-        _processing_table_def           sys_syn_dblink.processing_tables_def;
+        _proc_table_def                 sys_syn_dblink.proc_tables_def;
         _rule_group_ids                 text[];
         _column_type_id_name            TEXT;
         _column_type_attr_name          TEXT;
@@ -579,26 +690,21 @@ DECLARE
         _return_columns_nodiff          sys_syn_dblink.create_put_column[];
         _variable_index                 smallint := 0;
 BEGIN
-        _processing_table_def := (
-                SELECT  processing_tables_def
-                FROM    sys_syn_dblink.processing_tables_def
-                WHERE   processing_tables_def.in_table_id = put_columns_get.in_table_id AND
-                        processing_tables_def.out_group_id = put_columns_get.out_group_id);
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = put_columns_get.proc_table_id);
 
-        IF _processing_table_def IS NULL THEN
-                RAISE EXCEPTION 'Cannot find in_table_id ''%'' out_group_id ''%''.', put_columns_get.in_table_id,
-                        put_columns_get.out_group_id
-                USING HINT = 'Check the processing_tables_def table.';
+        IF _proc_table_def IS NULL THEN
+                RAISE EXCEPTION 'Cannot find proc_table_id ''%''.', put_columns_get.proc_table_id
+                USING HINT = 'Check the proc_tables_def table.';
         END IF;
 
-        _rule_group_ids := sys_syn_dblink.rule_group_ids_get(_processing_table_def);
+        _rule_group_ids := sys_syn_dblink.rule_group_ids_get(_proc_table_def);
 
-        _column_type_id_name            := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id ||
-                                                '_processing_id';
-        _column_type_attr_name          := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id ||
-                                                '_processing_attributes';
-        _column_type_nodiff_name        := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id ||
-                                                '_processing_attributes';
+        _column_type_id_name            := _proc_table_def.proc_table_id || '_proc_id';
+        _column_type_attr_name          := _proc_table_def.proc_table_id || '_proc_attributes';
+        _column_type_nodiff_name        := _proc_table_def.proc_table_id || '_proc_no_diff';
 
         _return_columns                 := ARRAY[]::sys_syn_dblink.create_put_column[];
         _return_columns_id              := ARRAY[]::sys_syn_dblink.create_put_column[];
@@ -609,13 +715,13 @@ BEGIN
                 FROM    pg_catalog.pg_namespace JOIN
                         pg_catalog.pg_class ON
                                 pg_class.relnamespace = pg_namespace.oid
-                WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _processing_table_def.proc_schema AND
+                WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _proc_table_def.proc_schema AND
                         pg_class.relname = _column_type_id_name) = 0 THEN
-                RAISE EXCEPTION 'Cannot find type ''%''.''%''.', _processing_table_def.proc_schema::text, _column_type_id_name
+                RAISE EXCEPTION 'Cannot find type ''%''.''%''.', _proc_table_def.proc_schema::text, _column_type_id_name
                 USING HINT = 'Check the proc_schema and table names.';
         END IF;
 
-        CREATE TEMP TABLE put_sql_expressions_temp (
+        CREATE TEMPORARY TABLE put_sql_expressions_temp (
                 in_column_type  sys_syn_dblink.in_column_type NOT NULL,
                 delta_types     sys_syn_dblink.delta_type[] NOT NULL,
                 variable_index  smallint NOT NULL,
@@ -625,6 +731,11 @@ BEGIN
                 exception_traps sys_syn_dblink.exception_trap[] NOT NULL,
                 declared        boolean DEFAULT FALSE NOT NULL
         ) ON COMMIT DROP;
+
+        CREATE TEMPORARY TABLE primary_columns_temp (
+                primary_in_table_id     text NOT NULL,
+                primary_column_name     text NOT NULL)
+        ON COMMIT DROP;
 
         FOR     _column_name,           _format_type,
                 _in_column_type IN
@@ -639,7 +750,7 @@ BEGIN
                         pg_class.relnamespace = pg_namespace.oid JOIN
                 pg_catalog.pg_attribute ON
                         (pg_attribute.attrelid = pg_class.oid)
-        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _processing_table_def.proc_schema AND
+        WHERE   ('"'||pg_namespace.nspname||'"')::regnamespace =  _proc_table_def.proc_schema AND
                 pg_class.relname IN (_column_type_id_name, _column_type_attr_name, _column_type_nodiff_name) AND
                 pg_attribute.attnum > 0 AND
                 NOT pg_attribute.attisdropped
@@ -660,11 +771,20 @@ BEGIN
                 _return_column.pos_ref_column_names_like:= NULL;
                 _return_column.pos_in_column_type       := NULL;
 
+                DELETE FROM primary_columns_temp;
+
+                INSERT INTO primary_columns_temp
+                SELECT  proc_foreign_keys.primary_in_table_id,    proc_foreign_keys.primary_column_name
+                FROM    sys_syn_dblink.proc_foreign_keys
+                WHERE   proc_foreign_keys.cluster_id            = _proc_table_def.cluster_id AND
+                        proc_foreign_keys.foreign_proc_table_id = _proc_table_def.proc_table_id AND
+                        proc_foreign_keys.foreign_column_name   = _column_name;
+
                 CASE _in_column_type
                         WHEN 'Id'::sys_syn_dblink.in_column_type THEN
                                 _return_column.value_expression := 'id.' || quote_ident(_column_name);
                         WHEN 'Attribute'::sys_syn_dblink.in_column_type THEN
-                                IF _processing_table_def.attributes_array THEN
+                                IF _proc_table_def.attributes_array THEN
                                         _return_column.value_expression := 'attribute_rows.' || quote_ident(_column_name);
                                 ELSE
                                         _return_column.value_expression := 'attributes.' || quote_ident(_column_name);
@@ -674,12 +794,11 @@ BEGIN
                         ELSE    _return_column.value_expression := quote_ident(_column_name);
                 END CASE;
 
-                SELECT  processing_table_columns_def.array_order
+                SELECT  proc_columns_def.array_order
                 INTO    _return_column.array_order
-                FROM    sys_syn_dblink.processing_table_columns_def
-                WHERE   processing_table_columns_def.in_table_id        = _processing_table_def.in_table_id AND
-                        processing_table_columns_def.out_group_id       = _processing_table_def.out_group_id AND
-                        processing_table_columns_def.column_name        = _column_name;
+                FROM    sys_syn_dblink.proc_columns_def
+                WHERE   proc_columns_def.proc_table_id  = _proc_table_def.proc_table_id AND
+                        proc_columns_def.column_name    = _column_name;
 
                 _add_columns                            := ARRAY[]::sys_syn_dblink.create_put_column[];
                 _final_ids                              := ARRAY[]::TEXT[];
@@ -695,34 +814,45 @@ BEGIN
                 ORDER BY put_column_transforms.priority
                 LOOP
 
-                        IF      (_put_column_transform.in_table_id_like         IS NULL OR
-                                        _processing_table_def.in_table_id       LIKE _put_column_transform.in_table_id_like) AND
+                        IF      (_put_column_transform.proc_table_id_like       IS NULL OR
+                                        _proc_table_def.proc_table_id           LIKE _put_column_transform.proc_table_id_like) AND
+                                (_put_column_transform.in_table_id_like         IS NULL OR
+                                        _proc_table_def.in_table_id             LIKE _put_column_transform.in_table_id_like) AND
                                 (_put_column_transform.out_group_id_like        IS NULL OR
-                                        _processing_table_def.out_group_id      LIKE _put_column_transform.out_group_id_like) AND
+                                        _proc_table_def.out_group_id            LIKE _put_column_transform.out_group_id_like) AND
                                 (_put_column_transform.in_group_id_like         IS NULL OR
-                                        _processing_table_def.in_group_id       LIKE _put_column_transform.in_group_id_like) AND
+                                        _proc_table_def.in_group_id             LIKE _put_column_transform.in_group_id_like) AND
                                 (_put_column_transform.proc_schema_like         IS NULL OR
-                                        _processing_table_def.proc_schema::text LIKE _put_column_transform.proc_schema_like) AND
+                                        _proc_table_def.proc_schema::text       LIKE _put_column_transform.proc_schema_like) AND
                                 (_put_column_transform.put_schema_like          IS NULL OR
-                                        _processing_table_def.put_schema::text  LIKE _put_column_transform.put_schema_like) AND
+                                        _proc_table_def.put_schema::text        LIKE _put_column_transform.put_schema_like) AND
                                 (_put_column_transform.put_table_name_like      IS NULL OR
-                                        _processing_table_def.put_table_name    LIKE _put_column_transform.put_table_name_like) AND
+                                        _proc_table_def.put_table_name          LIKE _put_column_transform.put_table_name_like) AND
                                 (_put_column_transform.table_type_id_like       IS NULL OR
-                                        _processing_table_def.table_type_id     LIKE _put_column_transform.table_type_id_like) AND
+                                        _proc_table_def.table_type_id           LIKE _put_column_transform.table_type_id_like) AND
                                 (_put_column_transform.attributes_array         IS NULL OR
-                                        _processing_table_def.attributes_array  = _put_column_transform.attributes_array) AND
+                                        _proc_table_def.attributes_array        = _put_column_transform.attributes_array) AND
+                                (_put_column_transform.cluster_id_like          IS NULL OR
+                                        _proc_table_def.cluster_id              LIKE _put_column_transform.cluster_id_like) AND
                                 (_put_column_transform.dblink_connname_like     IS NULL OR
-                                        _processing_table_def.dblink_connname   LIKE _put_column_transform.dblink_connname_like) AND
+                                        _proc_table_def.dblink_connname         LIKE _put_column_transform.dblink_connname_like) AND
                                 (_put_column_transform.remote_schema_like       IS NULL OR
-                                        _processing_table_def.remote_schema     LIKE _put_column_transform.remote_schema_like) AND
+                                        _proc_table_def.remote_schema           LIKE _put_column_transform.remote_schema_like) AND
 /*                              (_put_column_transform.queue_id                 IS NULL OR
-                                        _processing_table_def.queue_id          = _put_column_transform.queue_id) AND*/
+                                        _proc_table_def.queue_id                = _put_column_transform.queue_id) AND*/
                                 (_put_column_transform.in_column_type           IS NULL OR
                                         _return_column.in_column_type =         _put_column_transform.in_column_type) AND
                                 (_put_column_transform.column_name_like         IS NULL OR
                                         _return_column.column_name              LIKE _put_column_transform.column_name_like) AND
                                 (_put_column_transform.data_type_like           IS NULL OR
-                                        _return_column.data_type                LIKE _put_column_transform.data_type_like)
+                                        _return_column.data_type                LIKE _put_column_transform.data_type_like) AND
+                                (_put_column_transform.primary_in_table_id_like IS NULL OR
+                                        EXISTS (SELECT 1 FROM primary_columns_temp AS tmp WHERE
+                                                tmp.primary_in_table_id LIKE _put_column_transform.primary_in_table_id_like AND
+                                                tmp.primary_column_name LIKE _put_column_transform.primary_column_name_like) OR
+                                (_proc_table_def.in_table_id            LIKE _put_column_transform.primary_in_table_id_like AND
+                                _return_column.column_name              LIKE _put_column_transform.primary_column_name_like
+                                ))
                                 THEN
 
                                 IF _put_column_transform.priority = _last_priority THEN
@@ -822,6 +952,8 @@ BEGIN
 
         END LOOP;
 
+        DROP TABLE primary_columns_temp;
+
         FOR     _return_column IN
         SELECT  *
         FROM    unnest(add_columns || _return_columns) AS add_columns
@@ -863,7 +995,7 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_columns_get(text, text, sys_syn_dblink.create_put_column[])
+ALTER FUNCTION sys_syn_dblink.put_columns_get(text, sys_syn_dblink.create_put_column[])
   OWNER TO postgres;
 
 CREATE FUNCTION sys_syn_dblink.proc_columns_format (
@@ -992,11 +1124,12 @@ ALTER FUNCTION sys_syn_dblink.put_column_format(sys_syn_dblink.create_put_column
   OWNER TO postgres;
 
 
-CREATE FUNCTION sys_syn_dblink.processing_table_create (
-        proc_schema             regnamespace,
+CREATE FUNCTION sys_syn_dblink.proc_table_create (
         in_table_id             text,
         out_group_id            text,
         put_group_id            text,
+        proc_schema             regnamespace default null,
+        proc_table_id           text default null,
         put_schema              regnamespace default null,
         put_table_name          text default null,
         table_type_id           text default 'sys_syn-direct',
@@ -1004,20 +1137,19 @@ CREATE FUNCTION sys_syn_dblink.processing_table_create (
         dblink_connname         text default 'sys_syn',
         hold_cache_min_rows     int default 256,
         remote_status_batch_rows bigint default 4096,
-        comments                text default '')
+        comments                text default '%1')
   RETURNS void AS
 $BODY$
 DECLARE
         _put_table_name                         TEXT;
         _sql_buffer                             TEXT;
         _sql_delimit                            BOOLEAN;
-        _object_id                              TEXT;
-        _object_id_worker                       TEXT;
+        _proc_worker_def                        sys_syn_dblink.proc_workers_def%ROWTYPE;
         _column_name                            TEXT;
         _type_id_name                           TEXT;
         _type_attributes_name                   TEXT;
         _type_no_diff_name                      TEXT;
-        _processing_table_def                   sys_syn_dblink.processing_tables_def;
+        _proc_table_def                         sys_syn_dblink.proc_tables_def;
         _table_type_def                         sys_syn_dblink.table_types_def;
         _columns_proc                           sys_syn_dblink.create_proc_column[];
         _columns_put                            sys_syn_dblink.create_put_column[];
@@ -1034,40 +1166,67 @@ DECLARE
         _omit                                   boolean;
         _last_priority                          smallint;
 BEGIN
-        SELECT  processing_table_create.proc_schema,               processing_table_create.in_table_id,
-                processing_table_create.out_group_id,              in_tables_def.in_group_id,
-                processing_table_create.put_group_id,
-                COALESCE(processing_table_create.put_schema, processing_table_create.proc_schema),
-                COALESCE(put_table_name, in_table_id||'_'||out_group_id),
-                processing_table_create.table_type_id,             in_tables_def.attributes_array,
-                processing_table_create.table_settings,
-                processing_table_create.dblink_connname,           in_tables_def.proc_schema_name,
-                processing_table_create.hold_cache_min_rows,       processing_table_create.remote_status_batch_rows,
-                replace(processing_table_create.comments, '%1', in_tables_def.comments)
-        INTO    _processing_table_def.proc_schema,              _processing_table_def.in_table_id,
-                _processing_table_def.out_group_id,             _processing_table_def.in_group_id,
-                _processing_table_def.put_group_id,
-                _processing_table_def.put_schema,
-                _processing_table_def.put_table_name,
-                _processing_table_def.table_type_id,            _processing_table_def.attributes_array,
-                _processing_table_def.table_settings,
-                _processing_table_def.dblink_connname,          _processing_table_def.remote_schema,
-                _processing_table_def.hold_cache_min_rows,      _processing_table_def.remote_status_batch_rows,
-                _processing_table_def.comments
+        SELECT  COALESCE(proc_table_create.proc_schema, current_schema()::regnamespace),
+                COALESCE(proc_table_create.proc_table_id, in_table_def.in_table_id),
+                in_table_def.cluster_id,                proc_table_create.dblink_connname,
+                in_table_def.schema_name,               in_table_def.in_table_id,
+                in_table_def.in_group_id,               in_table_def.attributes_array,
+                in_table_def.out_group_id,
+
+                proc_table_create.put_group_id,
+                COALESCE(proc_table_create.put_schema, current_schema()::regnamespace),
+                COALESCE(put_table_name, in_table_def.in_table_id),
+
+                proc_table_create.table_type_id,        proc_table_create.table_settings,
+                proc_table_create.hold_cache_min_rows,  proc_table_create.remote_status_batch_rows,
+                in_table_def.claim_queue_count,
+                replace(proc_table_create.comments, '%1', in_table_def.comments)
+
+        INTO    _proc_table_def.proc_schema,
+                _proc_table_def.proc_table_id,
+                _proc_table_def.cluster_id,             _proc_table_def.dblink_connname,
+                _proc_table_def.remote_schema,          _proc_table_def.in_table_id,
+                _proc_table_def.in_group_id,            _proc_table_def.attributes_array,
+                _proc_table_def.out_group_id,
+
+                _proc_table_def.put_group_id,
+                _proc_table_def.put_schema,
+                _proc_table_def.put_table_name,
+
+                _proc_table_def.table_type_id,          _proc_table_def.table_settings,
+                _proc_table_def.hold_cache_min_rows,    _proc_table_def.remote_status_batch_rows,
+                _proc_table_def.queue_count,
+                _proc_table_def.comments
+
         FROM    dblink(dblink_connname, $$
-                        SELECT  in_tables_def.in_group_id,
+                        SELECT  in_tables_def.in_table_id,
+                                in_tables_def.in_group_id,
                                 in_tables_def.attributes_array,
                                 CASE WHEN SUBSTRING(in_tables_def.schema::text, 1, 1) = '"' THEN
                                         replace(
                                             SUBSTRING(in_tables_def.schema::text, 2,LENGTH(in_tables_def.schema::text)-2),
                                             '""', '"')
-                                        ELSE in_tables_def.schema::text END AS proc_schema_name,
-                                in_tables_def.comments
-                        FROM    sys_syn.in_tables_def
-                        WHERE   in_tables_def.in_table_id = $$||quote_literal(processing_table_create.in_table_id)||$$
-                $$) AS in_tables_def(in_group_id text, attributes_array boolean, proc_schema_name text, comments text);
+                                        ELSE in_tables_def.schema::text END AS schema_name,
+                                in_tables_def.comments,
+                                out_tables_def.out_group_id,
+                                out_tables_def.claim_queue_count,
+                                settings.cluster_id
+                        FROM    sys_syn.in_tables_def JOIN sys_syn.out_tables_def ON
+                                        out_tables_def.in_table_id = in_tables_def.in_table_id JOIN
+                                sys_syn.settings ON
+                                        TRUE
+                        WHERE   in_tables_def.in_table_id = $$||quote_literal(proc_table_create.in_table_id)||$$ AND
+                                out_tables_def.out_group_id = $$||quote_literal(proc_table_create.out_group_id)||$$
+                $$) AS in_table_def(in_table_id text, in_group_id text, attributes_array boolean, schema_name text, comments text,
+                        out_group_id text, claim_queue_count smallint, cluster_id text);
 
-        _rule_group_ids := sys_syn_dblink.rule_group_ids_get(_processing_table_def);
+        IF _proc_table_def.in_table_id IS NULL THEN
+                RAISE EXCEPTION 'Cannot find in_table_id ''%'' out_group_id ''%''.', proc_table_create.in_table_id,
+                        proc_table_create.out_group_id
+                USING HINT = 'Check the sys_syn.in_tables_def table.';
+        END IF;
+
+        _rule_group_ids := sys_syn_dblink.rule_group_ids_get(_proc_table_def);
 
         _add_put_columns                        := ARRAY[]::sys_syn_dblink.create_put_column[];
         _table_settings                         := ''::hstore;
@@ -1084,34 +1243,38 @@ BEGIN
         ORDER BY put_table_transforms.priority
         LOOP
 
-                IF      (_put_table_transform.in_table_id_like          IS NULL OR
-                                _processing_table_def.in_table_id       LIKE _put_table_transform.in_table_id_like) AND
+                IF      (_put_table_transform.proc_table_id_like        IS NULL OR
+                                _proc_table_def.proc_table_id           LIKE _put_table_transform.proc_table_id_like) AND
+                        (_put_table_transform.in_table_id_like          IS NULL OR
+                                _proc_table_def.in_table_id             LIKE _put_table_transform.in_table_id_like) AND
                         (_put_table_transform.out_group_id_like         IS NULL OR
-                                _processing_table_def.out_group_id      LIKE _put_table_transform.out_group_id_like) AND
+                                _proc_table_def.out_group_id            LIKE _put_table_transform.out_group_id_like) AND
                         (_put_table_transform.in_group_id_like          IS NULL OR
-                                _processing_table_def.in_group_id       LIKE _put_table_transform.in_group_id_like) AND
+                                _proc_table_def.in_group_id             LIKE _put_table_transform.in_group_id_like) AND
                         (_put_table_transform.proc_schema_like          IS NULL OR
-                                _processing_table_def.proc_schema::text LIKE _put_table_transform.proc_schema_like) AND
+                                _proc_table_def.proc_schema::text       LIKE _put_table_transform.proc_schema_like) AND
                         (_put_table_transform.put_schema_like           IS NULL OR
-                                _processing_table_def.put_schema::text  LIKE _put_table_transform.put_schema_like) AND
+                                _proc_table_def.put_schema::text        LIKE _put_table_transform.put_schema_like) AND
                         (_put_table_transform.put_table_name_like       IS NULL OR
-                                _processing_table_def.put_table_name    LIKE _put_table_transform.put_table_name_like) AND
+                                _proc_table_def.put_table_name          LIKE _put_table_transform.put_table_name_like) AND
                         (_put_table_transform.table_type_id_like        IS NULL OR
-                                _processing_table_def.table_type_id     LIKE _put_table_transform.table_type_id_like) AND
+                                _proc_table_def.table_type_id           LIKE _put_table_transform.table_type_id_like) AND
                         (_put_table_transform.attributes_array          IS NULL OR
-                                _processing_table_def.attributes_array  = _put_table_transform.attributes_array) AND
+                                _proc_table_def.attributes_array        = _put_table_transform.attributes_array) AND
+                        (_put_table_transform.cluster_id_like           IS NULL OR
+                                _proc_table_def.cluster_id              LIKE _put_table_transform.cluster_id_like) AND
                         (_put_table_transform.dblink_connname_like      IS NULL OR
-                                _processing_table_def.dblink_connname   LIKE _put_table_transform.dblink_connname_like) AND
+                                _proc_table_def.dblink_connname         LIKE _put_table_transform.dblink_connname_like) AND
                         (_put_table_transform.remote_schema_like        IS NULL OR
-                                _processing_table_def.remote_schema     LIKE _put_table_transform.remote_schema_like)/* AND
+                                _proc_table_def.remote_schema           LIKE _put_table_transform.remote_schema_like)/* AND
                         (_put_table_transform.queue_id                  IS NULL OR
-                                _processing_table_def.queue_id          = _put_table_transform.queue_id)*/
+                                _proc_table_def.queue_id                = _put_table_transform.queue_id)*/
                         THEN
 
                         IF _put_table_transform.priority = _last_priority THEN
                                 RAISE EXCEPTION
-                                'More than 1 rule meets the criteria of in_table_id ''%'' on the same priority (%).',
-                                        in_table_id, _put_table_transform.priority
+                                'More than 1 rule meets the criteria of proc_table_id ''%'' on the same priority (%).',
+                                        _proc_table_def.proc_table_id, _put_table_transform.priority
                                 USING HINT =
         'Change one of the rule''s priority.  If multiple rules are activated on the same priority, the code may be indeterminate.';
                         END IF;
@@ -1124,40 +1287,40 @@ BEGIN
                         _last_priority := _put_table_transform.priority;
 
                         IF _put_table_transform.new_proc_schema IS NOT NULL THEN
-                                _processing_table_def.proc_schema :=
-                                        replace(_put_table_transform.new_proc_schema, '%1',_processing_table_def.proc_schema::text);
+                                _proc_table_def.proc_schema :=
+                                        replace(_put_table_transform.new_proc_schema, '%1',_proc_table_def.proc_schema::text);
                         END IF;
 
                         IF _put_table_transform.new_put_schema IS NOT NULL THEN
-                                _processing_table_def.put_schema :=
-                                        replace(_put_table_transform.new_put_schema, '%1', _processing_table_def.put_schema::text);
+                                _proc_table_def.put_schema :=
+                                        replace(_put_table_transform.new_put_schema, '%1', _proc_table_def.put_schema::text);
                         END IF;
 
                         IF _put_table_transform.new_put_table_name IS NOT NULL THEN
-                                _processing_table_def.put_table_name :=
-                                        replace(_put_table_transform.new_put_table_name, '%1',_processing_table_def.put_table_name);
+                                _proc_table_def.put_table_name :=
+                                        replace(_put_table_transform.new_put_table_name, '%1',_proc_table_def.put_table_name);
                         END IF;
 
                         IF _put_table_transform.new_table_type_id IS NOT NULL THEN
-                                _processing_table_def.table_type_id :=
-                                        replace(_put_table_transform.new_table_type_id, '%1', _processing_table_def.table_type_id);
+                                _proc_table_def.table_type_id :=
+                                        replace(_put_table_transform.new_table_type_id, '%1', _proc_table_def.table_type_id);
                         END IF;
 
                         IF _put_table_transform.new_dblink_connname IS NOT NULL THEN
-                                _processing_table_def.dblink_connname :=
-                                     replace(_put_table_transform.new_dblink_connname, '%1', _processing_table_def.dblink_connname);
+                                _proc_table_def.dblink_connname :=
+                                     replace(_put_table_transform.new_dblink_connname, '%1', _proc_table_def.dblink_connname);
                         END IF;
 
                         IF _put_table_transform.new_hold_cache_min_rows IS NOT NULL THEN
-                                _processing_table_def.hold_cache_min_rows := _put_table_transform.new_hold_cache_min_rows;
+                                _proc_table_def.hold_cache_min_rows := _put_table_transform.new_hold_cache_min_rows;
                         END IF;
 
                         IF _put_table_transform.new_remote_status_batch_rows IS NOT NULL THEN
-                                _processing_table_def.remote_status_batch_rows := _put_table_transform.new_remote_status_batch_rows;
+                                _proc_table_def.remote_status_batch_rows := _put_table_transform.new_remote_status_batch_rows;
                         END IF;
 
 /*                      IF _put_table_transform.new_queue_id IS NOT NULL THEN
-                                _processing_table_def.queue_id := _put_table_transform.new_queue_id;
+                                _proc_table_def.queue_id := _put_table_transform.new_queue_id;
                         END IF;*/
 
                         _add_put_columns        := _add_put_columns     || _put_table_transform.add_columns;
@@ -1206,29 +1369,52 @@ BEGIN
                 RETURN;
         END IF;
 
-        INSERT INTO sys_syn_dblink.processing_tables_def VALUES(_processing_table_def.*);
+        INSERT INTO sys_syn_dblink.proc_tables_def VALUES(_proc_table_def.*);
 
-        _processing_table_def := (
-                SELECT  processing_tables_def
-                FROM    sys_syn_dblink.processing_tables_def
-                WHERE   processing_tables_def.in_table_id   = processing_table_create.in_table_id AND
-                        processing_tables_def.out_group_id  = processing_table_create.out_group_id);
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = _proc_table_def.proc_table_id);
 
-        INSERT INTO sys_syn_dblink.processing_table_workers_def (
-                in_table_id,                            out_group_id,
-                worker_id
-        )
-        VALUES (_processing_table_def.in_table_id,      _processing_table_def.out_group_id,
-                0);
+        INSERT INTO sys_syn_dblink.proc_partitions_def
+        SELECT  _proc_table_def.proc_table_id,
+                                dblink_partitions.partition_id, dblink_partitions.comments
+        FROM    dblink(dblink_connname, $$
+                        SELECT  partition_id,                   comments
+                        FROM    sys_syn.in_partitions_def
+                        WHERE   in_table_id = $$||quote_literal(_proc_table_def.in_table_id)||$$
+                $$) AS dblink_partitions(partition_id smallint, comments text);
+
+        IF _proc_table_def.queue_count IS NULL THEN
+                INSERT INTO sys_syn_dblink.proc_workers_def (
+                        proc_table_id,                          partition_id,
+                        worker_id,                              queue_id
+                )
+                SELECT  _proc_table_def.proc_table_id,          proc_partitions_def.partition_id,
+                        proc_partitions_def.partition_id,       NULL
+                FROM    sys_syn_dblink.proc_partitions_def
+                WHERE   proc_partitions_def.proc_table_id = _proc_table_def.proc_table_id;
+        ELSE
+                INSERT INTO sys_syn_dblink.proc_workers_def (
+                        proc_table_id,                          partition_id,
+                        worker_id,
+                        queue_id
+                )
+                SELECT  _proc_table_def.proc_table_id,          proc_partitions_def.partition_id,
+                        ((partition_id - 1) * _proc_table_def.queue_count) + generate_series,
+                        generate_series
+                FROM    sys_syn_dblink.proc_partitions_def JOIN generate_series(1, _proc_table_def.queue_count) ON TRUE
+                WHERE   proc_partitions_def.proc_table_id = _proc_table_def.proc_table_id;
+        END IF;
 
         SELECT  table_types_def.initial_table_settings || _table_settings
         INTO    _table_settings
         FROM    sys_syn_dblink.table_types_def
-        WHERE   table_types_def.table_type_id = _processing_table_def.table_type_id;
+        WHERE   table_types_def.table_type_id = _proc_table_def.table_type_id;
 
-        _type_id_name           := in_table_id||'_'||out_group_id||'_processing_id';
-        _type_attributes_name   := in_table_id||'_'||out_group_id||'_processing_attributes';
-        _type_no_diff_name      := in_table_id||'_'||out_group_id||'_processing_no_diff';
+        _type_id_name           := _proc_table_def.proc_table_id||'_proc_id';
+        _type_attributes_name   := _proc_table_def.proc_table_id||'_proc_attributes';
+        _type_no_diff_name      := _proc_table_def.proc_table_id||'_proc_no_diff';
 
         CREATE TEMPORARY TABLE out_queue_data_view_columns_temp ON COMMIT DROP AS
         SELECT  *
@@ -1246,21 +1432,20 @@ BEGIN
                                 array_order
                         FROM    sys_syn.out_queue_data_view_columns_view
                         WHERE   out_queue_data_view_columns_view.in_table_id =
-                                        $$||quote_literal(processing_table_create.in_table_id)||$$ AND
+                                        $$||quote_literal(_proc_table_def.in_table_id)||$$ AND
                                 out_queue_data_view_columns_view.out_group_id =
-                                        $$||quote_literal(processing_table_create.out_group_id)||$$
+                                        $$||quote_literal(_proc_table_def.out_group_id)||$$
                 $$) AS out_queue_data_view_columns(column_name text, in_column_type smallint, format_type text,
                         column_ordinal smallint, array_order smallint);
 
         IF (SELECT COUNT(*) FROM out_queue_data_view_columns_temp) = 0 THEN
-                RAISE EXCEPTION 'data_view not found for in_table_id "%" out_group_id "%".', processing_table_create.in_table_id,
-                        processing_table_create.out_group_id
+                RAISE EXCEPTION 'data_view not found for in_table_id "%" out_group_id "%".', _proc_table_def.in_table_id,
+                        _proc_table_def.out_group_id
                 USING HINT = 'Make sure that the data_view was created.';
         END IF;
 
-        INSERT INTO sys_syn_dblink.processing_table_columns_def
-        SELECT  processing_table_create.dblink_connname, processing_table_create.in_table_id,  processing_table_create.out_group_id,
-                view_columns.column_name,
+        INSERT INTO sys_syn_dblink.proc_columns_def
+        SELECT  _proc_table_def.proc_table_id, view_columns.column_name,
                 CASE view_columns.in_column_type
                         WHEN    1 THEN 'Id'::sys_syn_dblink.in_column_type
                         WHEN    2 THEN 'Attribute'::sys_syn_dblink.in_column_type
@@ -1268,31 +1453,27 @@ BEGIN
                         WHEN    4 THEN 'TransIdIn'::sys_syn_dblink.in_column_type
                         ELSE    NULL
                 END AS in_column_type,
-                view_columns.format_type,
-                view_columns.column_ordinal,
-                view_columns.array_order
+                view_columns.format_type, view_columns.column_ordinal, view_columns.array_order
         FROM    out_queue_data_view_columns_temp AS view_columns
         ORDER BY view_columns.column_ordinal;
 
         DELETE
-        FROM    sys_syn_dblink.processing_foreign_keys
-        WHERE   processing_foreign_keys.dblink_connname = processing_table_create.dblink_connname AND
-                processing_foreign_keys.foreign_table_id= processing_table_create.in_table_id;
+        FROM    sys_syn_dblink.proc_foreign_keys
+        WHERE   proc_foreign_keys.foreign_proc_table_id = _proc_table_def.proc_table_id;
 
-        INSERT INTO sys_syn_dblink.processing_foreign_keys
-        SELECT  processing_table_create.dblink_connname,   dblink_foreign_keys.primary_table_id,
-                dblink_foreign_keys.foreign_table_id,   processing_table_create.out_group_id,
-                dblink_foreign_keys.foreign_key_index,  dblink_foreign_keys.primary_column_name,
-                dblink_foreign_keys.foreign_column_name
+        INSERT INTO sys_syn_dblink.proc_foreign_keys
+        SELECT  _proc_table_def.cluster_id,                     _proc_table_def.proc_table_id,
+                dblink_foreign_keys.foreign_key_index,          dblink_foreign_keys.primary_in_table_id,
+                dblink_foreign_keys.foreign_column_name,        dblink_foreign_keys.primary_column_name
         FROM    dblink(dblink_connname, $$
-                        SELECT  primary_table_id,       foreign_table_id,       foreign_key_index,
+                        SELECT  primary_in_table_id,    foreign_key_index,
                                 primary_column_name,    foreign_column_name
                         FROM    sys_syn.in_foreign_keys
-                        WHERE   foreign_table_id = $$||quote_literal(processing_table_create.in_table_id)||$$
-                $$) AS dblink_foreign_keys(primary_table_id text, foreign_table_id text, foreign_key_index smallint,
-                        primary_column_name text, foreign_column_name text);
+                        WHERE   foreign_in_table_id = $$||quote_literal(_proc_table_def.in_table_id)||$$
+                $$) AS dblink_foreign_keys(primary_in_table_id text, foreign_key_index smallint, primary_column_name text,
+                        foreign_column_name text);
 
-        _sql_buffer := 'CREATE TYPE ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' AS (';
+        _sql_buffer := 'CREATE TYPE ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' AS (';
         _sql_delimit := FALSE;
         FOR     _column_name IN
         SELECT  column_name
@@ -1320,7 +1501,7 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TYPE ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_attributes_name) || ' AS (';
+        _sql_buffer := 'CREATE TYPE ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_attributes_name) || ' AS (';
         _sql_delimit := FALSE;
         FOR     _column_name IN
         SELECT  column_name
@@ -1345,7 +1526,7 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TYPE ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_no_diff_name) || ' AS (';
+        _sql_buffer := 'CREATE TYPE ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_no_diff_name) || ' AS (';
         _sql_delimit := FALSE;
         FOR     _column_name IN
         SELECT  column_name
@@ -1370,56 +1551,13 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _object_id := in_table_id||'_'||out_group_id;
-        _object_id_worker := _object_id || '_0';
-
-        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _processing_table_def.proc_schema || '.' ||
-                quote_ident(_object_id_worker||'_processing') || ' (
-        id ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
-        trans_id_in             integer NOT NULL,
-        delta_type              sys_syn_dblink.delta_type NOT NULL,
-        queue_priority          smallint,
-        hold_updated            boolean,
-        prior_hold_reason_count integer,
-        prior_hold_reason_id    integer,
-        prior_hold_reason_text  text,
-        attributes ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_attributes_name) ||
-        CASE WHEN _processing_table_def.attributes_array THEN '[]' ELSE '' END || ',
-        no_diff ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_no_diff_name) || ',
-        CONSTRAINT ' || quote_ident(_object_id_worker||'_processing_pkey') || ' PRIMARY KEY (id)
-)';
-        RAISE DEBUG '%', _sql_buffer;
-        EXECUTE _sql_buffer;
-
-        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _processing_table_def.proc_schema || '.' ||
-                quote_ident(_object_id_worker||'_processed') || ' (
-        id ' || _processing_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
-        hold_reason_id          integer,
-        hold_reason_text        text,
-        queue_priority          smallint,
-        processed_time          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT ' || quote_ident(_object_id_worker||'_processed_pkey') || ' PRIMARY KEY (id)
-)';
-        RAISE DEBUG '%', _sql_buffer;
-        EXECUTE _sql_buffer;
-
-        _sql_buffer := 'CREATE TABLE ' || _processing_table_def.proc_schema || '.' ||
-                quote_ident(_object_id_worker||'_queue_status') || ' (
-        queue_id smallint DEFAULT NULL)';
-        RAISE DEBUG '%', _sql_buffer;
-        EXECUTE _sql_buffer;
-
-        _sql_buffer := 'CREATE UNIQUE INDEX ' || quote_ident(_object_id_worker||'_queue_status_1_row_idx') || '
-        ON ' || _processing_table_def.proc_schema || '.' || quote_ident(_object_id_worker||'_queue_status') || '
-        USING btree
-        ((true));';
-        RAISE DEBUG '%', _sql_buffer;
-        EXECUTE _sql_buffer;
-
-        _sql_buffer := 'INSERT INTO ' || _processing_table_def.proc_schema || '.' ||
-                quote_ident(_object_id_worker||'_queue_status') || ' DEFAULT VALUES';
-        RAISE DEBUG '%', _sql_buffer;
-        EXECUTE _sql_buffer;
+        FOR     _proc_worker_def IN
+        SELECT  *
+        FROM    sys_syn_dblink.proc_workers_def
+        WHERE   proc_workers_def.proc_table_id = _proc_table_def.proc_table_id
+        LOOP
+                PERFORM sys_syn_dblink.proc_table_create_worker(_proc_table_def.proc_table_id, _proc_worker_def.worker_id);
+        END LOOP;
 
         DROP TABLE out_queue_data_view_columns_temp;
 
@@ -1430,15 +1568,15 @@ BEGIN
         _table_type_def := (
                 SELECT  table_types_def
                 FROM    sys_syn_dblink.table_types_def
-                WHERE   table_types_def.table_type_id           = _processing_table_def.table_type_id AND
-                        table_types_def.attributes_array        = _processing_table_def.attributes_array);
+                WHERE   table_types_def.table_type_id           = _proc_table_def.table_type_id AND
+                        table_types_def.attributes_array        = _proc_table_def.attributes_array);
 
         IF _table_type_def IS NULL THEN
                 RAISE EXCEPTION 'table_type_id not found.';
         END IF;
 
-        _columns_proc   := sys_syn_dblink.proc_columns_get(in_table_id, out_group_id);
-        _columns_put    := sys_syn_dblink.put_columns_get(in_table_id, out_group_id, _add_put_columns);
+        _columns_proc   := sys_syn_dblink.proc_columns_get(_proc_table_def.proc_table_id);
+        _columns_put    := sys_syn_dblink.put_columns_get(_proc_table_def.proc_table_id, _add_put_columns);
 
         SELECT  array_agg(proc_columns)
         INTO    _proc_columns_id
@@ -1471,30 +1609,139 @@ BEGIN
                 SELECT
                 FROM   pg_catalog.pg_class
                 JOIN   pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-                WHERE  pg_namespace.nspname = _processing_table_def.put_schema::text AND
-                       pg_class.relname = _processing_table_def.put_table_name
+                WHERE  pg_namespace.nspname     = _proc_table_def.put_schema::text AND
+                       pg_class.relname         = _proc_table_def.put_table_name
         ) THEN
-                EXECUTE 'SELECT '||_table_type_def.table_create_proc_schema::text||'.'||quote_ident(_table_type_def.table_create_proc_name)||
+                EXECUTE 'SELECT '||_table_type_def.table_create_proc_schema::text||'.'||
+                                quote_ident(_table_type_def.table_create_proc_name)||
                         '($1, $2, $3, $4)'
                 INTO    _sql_buffer
-                USING   _processing_table_def.put_schema::text, _processing_table_def.put_table_name,   _columns_put,
+                USING   _proc_table_def.put_schema::text,       _proc_table_def.put_table_name,         _columns_put,
                         _table_settings;
                 EXECUTE _sql_buffer;
         END IF;
 
-        PERFORM sys_syn_dblink.processing_table_code(
-                _processing_table_def,                  _table_type_def,
-                _proc_columns_id,                       _proc_columns_attribute,                _proc_columns_attribute_orderby,
+        PERFORM sys_syn_dblink.proc_table_code(
+                _proc_table_def,                        _table_type_def,
+                _proc_columns_id,                       _proc_columns_attribute,        _proc_columns_attribute_orderby,
                 _proc_columns_attribute_unordered,      _proc_columns_nodiff,
                 _columns_put,
-                _type_id_name,                          _type_attributes_name,                  _type_no_diff_name,
+                _type_id_name,                          _type_attributes_name,          _type_no_diff_name,
                 _table_settings);
+
+        FOR     _proc_worker_def IN
+        SELECT  *
+        FROM    sys_syn_dblink.proc_workers_def
+        WHERE   proc_workers_def.proc_table_id = _proc_table_def.proc_table_id
+        LOOP
+                PERFORM sys_syn_dblink.proc_table_code(
+                        _proc_table_def,                        _table_type_def,
+                        _proc_columns_id,                       _proc_columns_attribute,        _proc_columns_attribute_orderby,
+                        _proc_columns_attribute_unordered,      _proc_columns_nodiff,
+                        _columns_put,
+                        _type_id_name,                          _type_attributes_name,          _type_no_diff_name,
+                        _table_settings,                        _proc_worker_def.worker_id,     _proc_worker_def.partition_id);
+        END LOOP;
+
+        DROP TABLE put_sql_expressions_temp;
 END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.processing_table_create(regnamespace, text, text, text, regnamespace, text, text, hstore, text,
-        integer, bigint, text)
+ALTER FUNCTION sys_syn_dblink.proc_table_create(
+        in_table_id             text,
+        out_group_id            text,
+        put_group_id            text,
+        proc_schema             regnamespace,
+        proc_table_id           text,
+        put_schema              regnamespace,
+        put_table_name          text,
+        table_type_id           text,
+        table_settings          hstore,
+        dblink_connname         text,
+        hold_cache_min_rows     int,
+        remote_status_batch_rows bigint,
+        comments                text)
+  OWNER TO postgres;
+
+
+CREATE FUNCTION sys_syn_dblink.proc_table_create_worker (
+        proc_table_id   text,
+        worker_id       smallint)
+  RETURNS void AS
+$BODY$
+DECLARE
+        _proc_table_def         sys_syn_dblink.proc_tables_def;
+        _object_id              TEXT;
+        _worker_suffix          TEXT;
+        _type_id_name           TEXT;
+        _type_attributes_name   TEXT;
+        _type_no_diff_name      TEXT;
+        _sql_buffer             TEXT;
+BEGIN
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = proc_table_create_worker.proc_table_id);
+
+        _object_id              := _proc_table_def.proc_table_id;
+        _worker_suffix          := '_' || worker_id;
+        _type_id_name           := _proc_table_def.proc_table_id||'_proc_id';
+        _type_attributes_name   := _proc_table_def.proc_table_id||'_proc_attributes';
+        _type_no_diff_name      := _proc_table_def.proc_table_id||'_proc_no_diff';
+
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_processing'||_worker_suffix) || ' (
+        id ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
+        trans_id_in             integer NOT NULL,
+        delta_type              sys_syn_dblink.delta_type NOT NULL,
+        queue_priority          smallint,
+        hold_updated            boolean,
+        prior_hold_reason_count integer,
+        prior_hold_reason_id    integer,
+        prior_hold_reason_text  text,
+        attributes ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_attributes_name) ||
+        CASE WHEN _proc_table_def.attributes_array THEN '[]' ELSE '' END || ',
+        no_diff ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_no_diff_name) || ',
+        CONSTRAINT ' || quote_ident(_object_id||'_proc_pkey'||_worker_suffix) || ' PRIMARY KEY (id)
+)';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_processed'||_worker_suffix) || ' (
+        id ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
+        hold_reason_id          integer,
+        hold_reason_text        text,
+        queue_priority          smallint,
+        processed_time          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ' || quote_ident(_object_id||'_processed_pkey'||_worker_suffix) || ' PRIMARY KEY (id)
+)';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'CREATE TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_queue_status'||_worker_suffix) || ' (
+        queue_id smallint DEFAULT NULL)';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'CREATE UNIQUE INDEX ' || quote_ident(_object_id||'_queue_status_1_row_idx'||_worker_suffix) || '
+        ON ' || _proc_table_def.proc_schema || '.' || quote_ident(_object_id||'_queue_status'||_worker_suffix) || '
+        USING btree
+        ((true));';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'INSERT INTO ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_queue_status'||_worker_suffix) || ' DEFAULT VALUES';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 20;
+ALTER FUNCTION sys_syn_dblink.proc_table_create_worker(text, smallint)
   OWNER TO postgres;
 
 
@@ -1557,7 +1804,7 @@ ALTER FUNCTION sys_syn_dblink.put_columns_query(sys_syn_dblink.create_put_column
   OWNER TO postgres;
 
 
-CREATE TEMP TABLE put_sql_expressions_temp (
+CREATE TEMPORARY TABLE put_sql_expressions_temp (
         in_column_type  sys_syn_dblink.in_column_type NOT NULL,
         delta_types     sys_syn_dblink.delta_type[] NOT NULL,
         variable_index  smallint NOT NULL,
@@ -1565,8 +1812,8 @@ CREATE TEMP TABLE put_sql_expressions_temp (
         data_type       text NOT NULL,
         expression      text NOT NULL,
         exception_traps sys_syn_dblink.exception_trap[] NOT NULL,
-        declared        boolean DEFAULT FALSE NOT NULL
-) ON COMMIT DROP;
+        declared        boolean DEFAULT FALSE NOT NULL)
+ON COMMIT DROP;
 
 CREATE FUNCTION sys_syn_dblink.put_sql_expressions (
         in_column_types         sys_syn_dblink.in_column_type[],
@@ -2593,45 +2840,43 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_bitemporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
+ALTER FUNCTION sys_syn_dblink.put_sql_bitemporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+        hstore)
   OWNER TO postgres;
 
 -- end
 
 
 CREATE FUNCTION sys_syn_dblink.column_type_value_row (
-        in_table_id             text,
-        out_group_id            text,
+        proc_table_id           text,
         value_expression        text) RETURNS text
         AS $BODY$
 DECLARE
-        _processing_table_def   sys_syn_dblink.processing_tables_def;
+        _proc_table_def         sys_syn_dblink.proc_tables_def;
 BEGIN
-        _processing_table_def := (
-                SELECT  processing_tables_def
-                FROM    sys_syn_dblink.processing_tables_def
-                WHERE   processing_tables_def.in_table_id   = column_type_value_row.in_table_id AND
-                        processing_tables_def.out_group_id  = column_type_value_row.out_group_id);
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = column_type_value_row.proc_table_id);
 
-        IF _processing_table_def IS NULL THEN
-                RAISE EXCEPTION 'sys_syn_dblink.column_type_value_row processing_tables_def not found.';
+        IF _proc_table_def IS NULL THEN
+                RAISE EXCEPTION 'sys_syn_dblink.column_type_value_row proc_tables_def not found.';
         END IF;
 
-        RETURN 'quote_literal(' || value_expression || ') || ''::' || quote_ident(_processing_table_def.remote_schema) || '.' ||
-                quote_ident(_processing_table_def.in_table_id || '_in_id') || '''';
+        RETURN 'quote_literal(' || value_expression || ') || ''::' || quote_ident(_proc_table_def.remote_schema) || '.' ||
+                quote_ident(_proc_table_def.proc_table_id || '_in_id') || '''';
 END
 $BODY$
   LANGUAGE plpgsql STABLE
   COST 80;
 ALTER FUNCTION sys_syn_dblink.column_type_value_row(
-        in_table_id             text,
-        out_group_id            text,
+        proc_table_id           text,
         value_expression        text)
   OWNER TO postgres;
 
 
-CREATE FUNCTION sys_syn_dblink.processing_table_code (
-        processing_table_def                    sys_syn_dblink.processing_tables_def,
+CREATE FUNCTION sys_syn_dblink.proc_table_code (
+        proc_table_def                          sys_syn_dblink.proc_tables_def,
         table_type_def                          sys_syn_dblink.table_types_def,
         proc_columns_id                         sys_syn_dblink.create_proc_column[],
         proc_columns_attribute                  sys_syn_dblink.create_proc_column[],
@@ -2646,6 +2891,107 @@ CREATE FUNCTION sys_syn_dblink.processing_table_code (
         LANGUAGE plpgsql
         AS $_$
 DECLARE
+        _sql_data_type_array    TEXT;
+        _object_id              TEXT;
+        _name_put               TEXT;
+        _name_proc_id           TEXT;
+        _name_proc_attributes   TEXT;
+        _name_proc_no_diff      TEXT;
+        _sql_buffer             TEXT;
+        _put_code_sql           sys_syn_dblink.put_code_sql;
+BEGIN
+        _object_id              := proc_table_def.proc_table_id;
+
+        _name_put               := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_put');
+        _name_proc_id           := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_proc_id');
+        _name_proc_attributes   := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_proc_attributes');
+        _name_proc_no_diff      := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_proc_no_diff');
+
+        EXECUTE 'SELECT * FROM '||table_type_def.put_sql_proc_schema::text||'.'||quote_ident(table_type_def.put_sql_proc_name)||
+                '($1, $2, $3, $4, $5, $6, $7, $8)'
+        INTO    _put_code_sql
+        USING   proc_table_def.put_schema::text,        proc_table_def.put_table_name,
+                put_columns,                            proc_table_def.proc_schema::text,
+                type_id_name,                           type_attributes_name,                   type_no_diff_name,
+                table_settings;
+
+        IF proc_table_def.attributes_array THEN
+                _sql_data_type_array := '[]';
+        ELSE
+                _sql_data_type_array := '';
+        END IF;
+
+        _sql_buffer := $$
+CREATE FUNCTION $$||_name_put||$$(
+        trans_id_in     integer,
+        delta_type      sys_syn_dblink.delta_type,
+        queue_priority  smallint,
+        hold_updated    boolean,
+        prior_hold_reason_count integer,
+        prior_hold_reason_id    integer,
+        prior_hold_reason_text  text,
+        id              $$||_name_proc_id||$$,
+        attributes      $$||_name_proc_attributes||_sql_data_type_array||$$,
+        no_diff         $$||_name_proc_no_diff||$$)
+        RETURNS sys_syn_dblink.processed_status AS
+$DEFINITION$
+DECLARE
+        _processed_status       sys_syn_dblink.processed_status;
+        _exception_sql_state    text;
+        _exception_message      text;
+        _exception_detail       text;
+        _exception_hint         text;
+        _exception_context      text;$$||_put_code_sql.declarations_sql||$$
+BEGIN$$||_put_code_sql.logic_sql||$$
+
+        RETURN _processed_status;
+EXCEPTION WHEN others THEN
+        GET STACKED DIAGNOSTICS
+                _exception_sql_state    = RETURNED_SQLSTATE,    _exception_message      = MESSAGE_TEXT,
+                _exception_detail       = PG_EXCEPTION_DETAIL,  _exception_hint         = PG_EXCEPTION_HINT,
+                _exception_context      = PG_EXCEPTION_CONTEXT;
+        _processed_status.hold_reason_text := 'ERROR:  '||COALESCE(COALESCE(_exception_message, '')||COALESCE('
+SQL state:  '||NULLIF(_exception_sql_state,''), '')||COALESCE('
+Detail:  '||NULLIF(_exception_detail,''), '')||COALESCE('
+Hint:  '||NULLIF(_exception_hint,''), '')||COALESCE('
+Context:  '||NULLIF(_exception_context,''), ''), 'Null');
+        RETURN _processed_status;
+END
+$DEFINITION$
+        LANGUAGE plpgsql VOLATILE
+        COST 5000;
+$$;
+        EXECUTE _sql_buffer;
+END;
+$_$;
+ALTER FUNCTION sys_syn_dblink.proc_table_code(sys_syn_dblink.proc_tables_def, sys_syn_dblink.table_types_def,
+        sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[],
+        sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_put_column[],
+        text, text, text, hstore)
+  OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.proc_table_code (
+        proc_table_def                          sys_syn_dblink.proc_tables_def,
+        table_type_def                          sys_syn_dblink.table_types_def,
+        proc_columns_id                         sys_syn_dblink.create_proc_column[],
+        proc_columns_attribute                  sys_syn_dblink.create_proc_column[],
+        proc_columns_attribute_orderby          sys_syn_dblink.create_proc_column[],
+        proc_columns_attribute_unordered        sys_syn_dblink.create_proc_column[],
+        proc_columns_nodiff                     sys_syn_dblink.create_proc_column[],
+        put_columns                             sys_syn_dblink.create_put_column[],
+        type_id_name                            TEXT,
+        type_attributes_name                    TEXT,
+        type_no_diff_name                       TEXT,
+        table_settings                          hstore,
+        worker_id                               smallint,
+        partition_id                            smallint) RETURNS void
+        LANGUAGE plpgsql
+        AS $_$
+DECLARE
         _sql_attributes_insert  TEXT;
         _sql_attributes_select  TEXT;
         _sql_remote_array       TEXT;
@@ -2653,7 +2999,9 @@ DECLARE
         _sql_group_by           TEXT;
         _sql_data_type_array    TEXT;
         _object_id              TEXT;
-        _object_id_worker       TEXT;
+        _remote_object_id       TEXT;
+        _part_suffix            TEXT;
+        _worker_suffix          TEXT;
         _name_claim             TEXT;
         _name_queue_status      TEXT;
         _name_remote_claim      TEXT;
@@ -2666,44 +3014,45 @@ DECLARE
         _name_put               TEXT;
         _name_push_status       TEXT;
         _name_remote_queue_bulk TEXT;
-        _name_processing_id     TEXT;
-        _name_processing_attributes TEXT;
-        _name_processing_no_diff TEXT;
+        _name_proc_id           TEXT;
+        _name_proc_attributes   TEXT;
+        _name_proc_no_diff      TEXT;
         _sql_buffer             TEXT;
-        _put_code_sql           sys_syn_dblink.put_code_sql;
 BEGIN
-        _object_id := processing_table_def.in_table_id||'_'||processing_table_def.out_group_id;
-        _object_id_worker := _object_id || '_0';
+        _object_id              := proc_table_def.proc_table_id;
+        _remote_object_id       := proc_table_def.in_table_id || '_' || proc_table_def.out_group_id;
+        _part_suffix            := '_' || partition_id;
+        _worker_suffix          := '_' || worker_id;
 
-        _name_claim := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_claim');
-        _name_queue_status := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_queue_status');
-        _name_remote_claim := quote_ident(processing_table_def.remote_schema) || '.' ||
-                quote_ident(_object_id||'_claim');
-        _name_pull := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_pull');
-        _name_dblink_conn := quote_nullable(processing_table_def.dblink_connname);
-        _name_processed := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_processed');
-        _name_processing := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_processing');
-        _name_remote_queue_data := quote_ident(processing_table_def.remote_schema) || '.' ||
-                quote_ident(_object_id||'_queue_data');
-        _name_process := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_process');
-        _name_put := processing_table_def.proc_schema::text || '.' ||
+        _name_claim             := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_claim'||_worker_suffix);
+        _name_queue_status      := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_queue_status'||_worker_suffix);
+        _name_remote_claim      := quote_ident(proc_table_def.remote_schema) || '.' ||
+                quote_ident(_remote_object_id||'_claim'||_part_suffix);
+        _name_pull              := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_pull'||_worker_suffix);
+        _name_dblink_conn       := quote_nullable(proc_table_def.dblink_connname);
+        _name_processed         := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_processed'||_worker_suffix);
+        _name_processing        := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_processing'||_worker_suffix);
+        _name_remote_queue_data := quote_ident(proc_table_def.remote_schema) || '.' ||
+                quote_ident(_remote_object_id||'_queue_data'||_part_suffix);
+        _name_process           := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_process'||_worker_suffix);
+        _name_put               := proc_table_def.proc_schema::text || '.' ||
                 quote_ident(_object_id||'_put');
-        _name_push_status := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id_worker||'_push_status');
-        _name_remote_queue_bulk := quote_ident(processing_table_def.remote_schema) || '.' ||
-                quote_ident(_object_id||'_queue_bulk');
-        _name_processing_id := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id||'_processing_id');
-        _name_processing_attributes := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id||'_processing_attributes');
-        _name_processing_no_diff := processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id||'_processing_no_diff');
+        _name_push_status       := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_push_status'||_worker_suffix);
+        _name_remote_queue_bulk := quote_ident(proc_table_def.remote_schema) || '.' ||
+                quote_ident(_remote_object_id||'_queue_bulk'||_part_suffix);
+        _name_proc_id           := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_proc_id');
+        _name_proc_attributes   := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_proc_attributes');
+        _name_proc_no_diff      := proc_table_def.proc_schema::text || '.' ||
+                quote_ident(_object_id||'_proc_no_diff');
 
         _sql_buffer := $$
 CREATE FUNCTION $$||_name_claim||$$(queue_id smallint DEFAULT NULL)
@@ -2714,12 +3063,11 @@ DECLARE
         _queue_id               smallint := queue_id;
 BEGIN
         IF queue_id IS NULL THEN
-                SELECT  processing_table_workers_def.queue_id
+                SELECT  proc_workers_def.queue_id
                 INTO    _queue_id
-                FROM    sys_syn_dblink.processing_table_workers_def
-                WHERE   processing_table_workers_def.in_table_id = $$||quote_literal(processing_table_def.in_table_id)||$$ AND
-                        processing_table_workers_def.out_group_id = $$||quote_literal(processing_table_def.out_group_id)||$$ AND
-                        processing_table_workers_def.worker_id = 0;
+                FROM    sys_syn_dblink.proc_workers_def
+                WHERE   proc_workers_def.proc_table_id = $$||quote_literal(proc_table_def.proc_table_id)||$$ AND
+                        proc_workers_def.worker_id = 1;
         END IF;
 
         PERFORM * FROM dblink($$||_name_dblink_conn||$$, 'SELECT 0 FROM sys_syn.in_trans_claim_start();') AS t1(c1 int);
@@ -2740,7 +3088,7 @@ $DEFINITION$
 $$;
         EXECUTE _sql_buffer;
 
-        IF processing_table_def.attributes_array THEN
+        IF proc_table_def.attributes_array THEN
                 _sql_data_type_array := '[]';
                 _sql_attributes_insert := ',
                 attributes';
@@ -2749,13 +3097,18 @@ $$;
                         ROW(
                                 '||sys_syn_dblink.proc_columns_format(proc_columns_attribute, 'queue_data.%COLUMN_NAME%', ',
                                 ')||'
-                        )::'||_name_processing_attributes||'
+                        )::'||_name_proc_attributes||'
                         ORDER BY sys_syn_attribute_array_ordinal
                 ) AS sys_syn_attributes';
                 _sql_remote_array := ',          queue_data.sys_syn_attribute_array_ordinal';
                 _sql_dblink_array := ',  sys_syn_attribute_array_ordinal integer';
+
+                SELECT  array_to_string(array_agg(generate_series), ',')
+                INTO    _sql_group_by
+                FROM    generate_series(8, 7 + array_length(proc_columns_id, 1));
+
                 _sql_group_by := '
-        GROUP BY 1,2,3,4,5,6,7,8';
+        GROUP BY 1,2,3,4,5,6,7,' || _sql_group_by;
         ELSE
                 _sql_data_type_array := '';
                 _sql_attributes_insert := sys_syn_dblink.proc_columns_format(proc_columns_attribute, ',
@@ -2835,58 +3188,6 @@ $DEFINITION$
 $$;
         EXECUTE _sql_buffer;
 
-        EXECUTE 'SELECT * FROM '||table_type_def.put_sql_proc_schema::text||'.'||quote_ident(table_type_def.put_sql_proc_name)||
-                '($1, $2, $3, $4, $5, $6, $7, $8)'
-        INTO    _put_code_sql
-        USING   processing_table_def.put_schema::text,  processing_table_def.put_table_name,
-                put_columns,                            processing_table_def.proc_schema::text,
-                type_id_name,                           type_attributes_name,                   type_no_diff_name,
-                table_settings;
-
-        _sql_buffer := $$
-CREATE FUNCTION $$||_name_put||$$(
-        trans_id_in     integer,
-        delta_type      sys_syn_dblink.delta_type,
-        queue_priority  smallint,
-        hold_updated    boolean,
-        prior_hold_reason_count integer,
-        prior_hold_reason_id    integer,
-        prior_hold_reason_text  text,
-        id              $$||_name_processing_id||$$,
-        attributes      $$||_name_processing_attributes||_sql_data_type_array||$$,
-        no_diff         $$||_name_processing_no_diff||$$)
-        RETURNS sys_syn_dblink.processed_status AS
-$DEFINITION$
-DECLARE
-        _processed_status       sys_syn_dblink.processed_status;
-        _exception_sql_state    text;
-        _exception_message      text;
-        _exception_detail       text;
-        _exception_hint         text;
-        _exception_context      text;$$||_put_code_sql.declarations_sql||$$
-BEGIN$$||_put_code_sql.logic_sql||$$
-
-        RETURN _processed_status;
-EXCEPTION WHEN others THEN
-        GET STACKED DIAGNOSTICS
-                _exception_sql_state    = RETURNED_SQLSTATE,    _exception_message      = MESSAGE_TEXT,
-                _exception_detail       = PG_EXCEPTION_DETAIL,  _exception_hint         = PG_EXCEPTION_HINT,
-                _exception_context      = PG_EXCEPTION_CONTEXT;
-        _processed_status.hold_reason_text := 'ERROR:  '||COALESCE(COALESCE(_exception_message, '')||COALESCE('
-SQL state:  '||NULLIF(_exception_sql_state,''), '')||COALESCE('
-Detail:  '||NULLIF(_exception_detail,''), '')||COALESCE('
-Hint:  '||NULLIF(_exception_hint,''), '')||COALESCE('
-Context:  '||NULLIF(_exception_context,''), ''), 'Null');
-        RETURN _processed_status;
-END
-$DEFINITION$
-        LANGUAGE plpgsql VOLATILE
-        COST 5000;
-$$;
-        EXECUTE _sql_buffer;
-
-        DROP TABLE put_sql_expressions_temp;
-
 
         _sql_buffer := $$
 CREATE FUNCTION $$||_name_process||$$()
@@ -2933,7 +3234,7 @@ DECLARE
         _remote_dispatched      boolean;
         _queue_id               smallint;
         _remote_sql             text;
-        _processing_table_def   sys_syn_dblink.processing_tables_def;
+        _proc_table_def         sys_syn_dblink.proc_tables_def;
         _limit                  bigint;
         _offset                 bigint := 0;
 BEGIN
@@ -2941,19 +3242,18 @@ BEGIN
         INTO    _queue_id
         FROM    $$||_name_queue_status||$$ AS queue_status;
 
-        _processing_table_def := (
-                SELECT  processing_tables_def
-                FROM    sys_syn_dblink.processing_tables_def
-                WHERE   processing_tables_def.in_table_id = $$||quote_literal(processing_table_def.in_table_id)||$$ AND
-                        processing_tables_def.out_group_id = $$||quote_literal(processing_table_def.out_group_id)||$$);
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = $$||quote_literal(proc_table_def.proc_table_id)||$$);
 
-        _limit := _processing_table_def.remote_status_batch_rows;
+        _limit := _proc_table_def.remote_status_batch_rows;
 
         LOOP -- NOTE:  This is not a FOR loop.
                 SELECT  $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(id,hold_reason_id,hold_reason_text,queue_id,
                         queue_priority,processed_time) VALUES $DBL$ || array_to_string(array_agg('(' || $$ ||
                         sys_syn_dblink.column_type_value_row(
-                                processing_table_def.in_table_id, processing_table_def.out_group_id, 'id') ||
+                                proc_table_def.proc_table_id, 'id') ||
                         $$ || ',' ||
                         quote_nullable(hold_reason_id) || ',' || quote_nullable(hold_reason_text) || ',' ||
                         quote_nullable(_queue_id) || ',' || quote_nullable(queue_priority) || ',' ||
@@ -2998,95 +3298,127 @@ $$;
         EXECUTE _sql_buffer;
 END;
 $_$;
-ALTER FUNCTION sys_syn_dblink.processing_table_code(sys_syn_dblink.processing_tables_def, sys_syn_dblink.table_types_def,
+ALTER FUNCTION sys_syn_dblink.proc_table_code(sys_syn_dblink.proc_tables_def, sys_syn_dblink.table_types_def,
         sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[],
         sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_put_column[],
-        text, text, text, hstore)
+        text, text, text, hstore, smallint, smallint)
   OWNER TO postgres;
 
-CREATE FUNCTION sys_syn_dblink.processing_table_drop (in_table_id text, out_group_id text, drop_put_table boolean default false)
+CREATE FUNCTION sys_syn_dblink.proc_table_drop (proc_table_id text, drop_put_table boolean default false)
         RETURNS void
         LANGUAGE plpgsql
         AS $_$
 DECLARE
-        _processing_table_def                   sys_syn_dblink.processing_tables_def;
-        _object_id                              TEXT;
-        _object_id_worker                       TEXT;
-        _sql_command_prefix                     TEXT;
-        _sql_name_type_processing_id            TEXT;
-        _sql_name_type_processing_attributes    TEXT;
-        _sql_name_type_processing_no_diff       TEXT;
+        _proc_table_def                 sys_syn_dblink.proc_tables_def;
+        _object_id                      TEXT;
+        _sql_command_prefix             TEXT;
+        _sql_name_type_proc_id          TEXT;
+        _sql_name_type_proc_attributes  TEXT;
+        _sql_name_type_proc_no_diff     TEXT;
+        _proc_worker_def                sys_syn_dblink.proc_workers_def%ROWTYPE;
 BEGIN
-        _processing_table_def := (
-                SELECT  processing_tables_def
-                FROM    sys_syn_dblink.processing_tables_def
-                WHERE   processing_tables_def.in_table_id       = processing_table_drop.in_table_id AND
-                        processing_tables_def.out_group_id      = processing_table_drop.out_group_id);
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = proc_table_drop.proc_table_id);
 
-        IF _processing_table_def IS NULL THEN
-                RAISE EXCEPTION 'Cannot find in_table_id ''%'' out_group_id ''%''.', processing_table_drop.in_table_id,
-                        processing_table_drop.out_group_id
-                USING HINT = 'Check the processing_tables_def table.';
+        IF _proc_table_def IS NULL THEN
+                RAISE EXCEPTION 'Cannot find proc_table_id ''%''.', proc_table_drop.proc_table_id
+                USING HINT = 'Check the proc_tables_def table.';
         END IF;
 
-        _object_id := _processing_table_def.in_table_id || '_' || _processing_table_def.out_group_id;
-        _object_id_worker := _object_id || '_0';
+        _object_id := _proc_table_def.proc_table_id;
 
-        _sql_name_type_processing_id            := _processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id||'_processing_id');
-        _sql_name_type_processing_attributes    := _processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id||'_processing_attributes') ||
-                CASE WHEN _processing_table_def.attributes_array THEN '[]' ELSE '' END;
-        _sql_name_type_processing_no_diff       := _processing_table_def.proc_schema::text || '.' ||
-                quote_ident(_object_id||'_processing_no_diff');
+        _sql_name_type_proc_id          := _proc_table_def.proc_schema::text || '.' || quote_ident(_object_id||'_proc_id');
+        _sql_name_type_proc_attributes  := _proc_table_def.proc_schema::text || '.' || quote_ident(_object_id||'_proc_attributes')||
+                CASE WHEN _proc_table_def.attributes_array THEN '[]' ELSE '' END;
+        _sql_name_type_proc_no_diff     := _proc_table_def.proc_schema::text || '.' || quote_ident(_object_id||'_proc_no_diff');
 
-        _sql_command_prefix := 'DROP FUNCTION ' || _processing_table_def.proc_schema::text || '.';
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_claim') || '(smallint)';
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_process') || '()';
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_pull') || '()';
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_push_status') || '()';
+        FOR     _proc_worker_def IN
+        SELECT  *
+        FROM    sys_syn_dblink.proc_workers_def
+        WHERE   proc_workers_def.proc_table_id = _proc_table_def.proc_table_id
+        LOOP
+                PERFORM sys_syn_dblink.proc_table_drop_worker(proc_table_id, _proc_worker_def.worker_id);
+        END LOOP;
+
+        _sql_command_prefix := 'DROP FUNCTION ' || _proc_table_def.proc_schema::text || '.';
         EXECUTE _sql_command_prefix || quote_ident(_object_id||'_put') || '(integer, sys_syn_dblink.delta_type, smallint, boolea' ||
-                'n, integer, integer, text, ' || _sql_name_type_processing_id || ', ' || _sql_name_type_processing_attributes ||
-                ', ' || _sql_name_type_processing_no_diff || ')';
-
-        _sql_command_prefix := 'DROP TABLE '|| _processing_table_def.proc_schema::text || '.';
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_queue_status');
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_processed');
-        EXECUTE _sql_command_prefix || quote_ident(_object_id_worker||'_processing');
+                'n, integer, integer, text, ' || _sql_name_type_proc_id || ', ' || _sql_name_type_proc_attributes ||
+                ', ' || _sql_name_type_proc_no_diff || ')';
 
         IF drop_put_table THEN
-                EXECUTE 'DROP TABLE ' || _processing_table_def.put_schema::text || '.' ||
-                        quote_ident(_processing_table_def.put_table_name);
+                EXECUTE 'DROP TABLE ' || _proc_table_def.put_schema::text || '.' ||
+                        quote_ident(_proc_table_def.put_table_name);
         END IF;
 
-        _sql_command_prefix := 'DROP TYPE '|| _processing_table_def.proc_schema::text || '.';
-        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processing_no_diff');
-        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processing_attributes');
-        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processing_id');
+        _sql_command_prefix := 'DROP TYPE '|| _proc_table_def.proc_schema::text || '.';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_proc_no_diff');
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_proc_attributes');
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_proc_id');
 
         DELETE
-        FROM    sys_syn_dblink.processing_foreign_keys
-        WHERE   processing_foreign_keys.foreign_table_id        = _processing_table_def.in_table_id AND
-                processing_foreign_keys.foreign_out_group_id    = _processing_table_def.out_group_id;
+        FROM    sys_syn_dblink.proc_foreign_keys
+        WHERE   proc_foreign_keys.foreign_proc_table_id = _proc_table_def.proc_table_id;
 
         DELETE
-        FROM    sys_syn_dblink.processing_table_columns_def
-        WHERE   processing_table_columns_def.in_table_id        = _processing_table_def.in_table_id AND
-                processing_table_columns_def.out_group_id       = _processing_table_def.out_group_id;
+        FROM    sys_syn_dblink.proc_columns_def
+        WHERE   proc_columns_def.proc_table_id = _proc_table_def.proc_table_id;
 
         DELETE
-        FROM    sys_syn_dblink.processing_table_workers_def
-        WHERE   processing_table_workers_def.in_table_id        = _processing_table_def.in_table_id AND
-                processing_table_workers_def.out_group_id       = _processing_table_def.out_group_id;
+        FROM    sys_syn_dblink.proc_workers_def
+        WHERE   proc_workers_def.proc_table_id = _proc_table_def.proc_table_id;
 
         DELETE
-        FROM    sys_syn_dblink.processing_tables_def
-        WHERE   processing_tables_def.in_table_id       = _processing_table_def.in_table_id AND
-                processing_tables_def.out_group_id      = _processing_table_def.out_group_id;
+        FROM    sys_syn_dblink.proc_partitions_def
+        WHERE   proc_partitions_def.proc_table_id = _proc_table_def.proc_table_id;
+
+        DELETE
+        FROM    sys_syn_dblink.proc_tables_def
+        WHERE   proc_tables_def.proc_table_id = _proc_table_def.proc_table_id;
 END;
 $_$
         COST 40;
-ALTER FUNCTION sys_syn_dblink.processing_table_drop(text, text, boolean)
+ALTER FUNCTION sys_syn_dblink.proc_table_drop(text, boolean)
+        OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.proc_table_drop_worker (proc_table_id text, worker_id smallint)
+        RETURNS void
+        LANGUAGE plpgsql
+        AS $_$
+DECLARE
+        _proc_table_def                 sys_syn_dblink.proc_tables_def;
+        _object_id                      TEXT;
+        _worker_suffix                  TEXT;
+        _sql_command_prefix             TEXT;
+BEGIN
+        _proc_table_def := (
+                SELECT  proc_tables_def
+                FROM    sys_syn_dblink.proc_tables_def
+                WHERE   proc_tables_def.proc_table_id = proc_table_drop_worker.proc_table_id);
+
+        IF _proc_table_def IS NULL THEN
+                RAISE EXCEPTION 'Cannot find proc_table_id ''%''.', proc_table_drop_worker.proc_table_id
+                USING HINT = 'Check the proc_tables_def table.';
+        END IF;
+
+        _object_id      := _proc_table_def.proc_table_id;
+        _worker_suffix  := '_' || worker_id;
+
+        _sql_command_prefix := 'DROP FUNCTION ' || _proc_table_def.proc_schema::text || '.';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_claim'||_worker_suffix) || '(smallint)';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_process'||_worker_suffix) || '()';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_pull'||_worker_suffix) || '()';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_push_status'||_worker_suffix) || '()';
+
+        _sql_command_prefix := 'DROP TABLE '|| _proc_table_def.proc_schema::text || '.';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_queue_status'||_worker_suffix);
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processed'||_worker_suffix);
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processing'||_worker_suffix);
+END;
+$_$
+        COST 40;
+ALTER FUNCTION sys_syn_dblink.proc_table_drop_worker(text, smallint)
         OWNER TO postgres;
 
 
@@ -3094,9 +3426,10 @@ SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.table_types_def', $$W
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.in_groups_def', '');
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.out_groups_def', '');
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.put_groups_def', '');
-SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.put_table_transforms', '');
-SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.put_column_transforms', '');
-SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.processing_tables_def', '');
-SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.processing_table_workers_def', '');
-SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.processing_table_columns_def', '');
-SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.processing_foreign_keys', '');
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.put_table_transforms', $$WHERE rule_group_id NOT LIKE 'sys_syn-%'$$);
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.put_column_transforms', $$WHERE rule_group_id NOT LIKE 'sys_syn-%'$$);
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.proc_tables_def', '');
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.proc_workers_def', '');
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.proc_partitions_def', '');
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.proc_columns_def', '');
+SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.proc_foreign_keys', '');

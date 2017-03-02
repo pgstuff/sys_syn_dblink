@@ -3,7 +3,7 @@ CREATE EXTENSION sys_syn_dblink;
 CREATE EXTENSION temporal_tables;
 CREATE EXTENSION btree_gist;
 INSERT INTO sys_syn_dblink.put_table_transforms(
-        rule_group_id,          priority,       final_ids,              in_table_id_like,
+        rule_group_id,          priority,       final_ids,              proc_table_id_like,
         table_settings)
 VALUES (NULL,                   25,             '{}',                   'test_table_bitemporal',
         $$
@@ -13,7 +13,7 @@ VALUES (NULL,                   25,             '{}',                   'test_ta
         sys_syn.bitemporal.range_2_active.column_name   => active_valid_periods
         $$);
 INSERT INTO sys_syn_dblink.put_column_transforms(
-        rule_group_id,          priority,       final_ids,              data_type_like,                 in_table_id_like,
+        rule_group_id,          priority,       final_ids,              data_type_like,                 proc_table_id_like,
         column_name_like,       new_data_type,          new_column_name,
         expression)
 VALUES (NULL,                   25,             '{date_infinity}',      'date',                         'test_table_bitemporal',
@@ -36,10 +36,10 @@ SELECT dblink_exec('sys_syn_test', 'BEGIN');
  BEGIN
 (1 row)
 
-INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_test', 'in');
-INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_test', 'out');
+INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'in');
+INSERT INTO sys_syn_dblink.out_groups_def VALUES ('sys_syn_dblink-test', 'out');
 INSERT INTO sys_syn_dblink.put_groups_def VALUES ('put');
-SELECT sys_syn_dblink.processing_table_create (
+SELECT sys_syn_dblink.proc_table_create (
         proc_schema     => 'processor_data',
         in_table_id     => 'test_table_bitemporal',
         out_group_id    => 'out',
@@ -47,25 +47,25 @@ SELECT sys_syn_dblink.processing_table_create (
         put_schema      => 'put_data',
         table_type_id   => 'sys_syn-bitemporal',
         dblink_connname => 'sys_syn_test');
- processing_table_create 
--------------------------
+ proc_table_create 
+-------------------
  
 (1 row)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_0_claim();
- test_table_bitemporal_out_0_claim 
------------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_claim_1();
+ test_table_bitemporal_claim_1 
+-------------------------------
  t
 (1 row)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_0_pull();
- test_table_bitemporal_out_0_pull 
-----------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_pull_1();
+ test_table_bitemporal_pull_1 
+------------------------------
  t
 (1 row)
 
 SELECT  trans_id_in, delta_type, queue_priority, hold_updated, prior_hold_reason_count, prior_hold_reason_id, prior_hold_reason_text, id, attributes, no_diff
-FROM    processor_data.test_table_bitemporal_out_0_processing
+FROM    processor_data.test_table_bitemporal_processing_1
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |                                                                                                                                                                                               attributes                                                                                                                                                                                                | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------
@@ -76,14 +76,14 @@ ORDER BY id, attributes;
            9 | Add        |                |              |                         |                      |                        | (5) | {"(\"Sat Jan 01 19:04:05 2011 PST\",01-01-2009,12-31-9999,\"test_data5 v1 original\")","(\"Sun Jan 01 19:04:05 2012 PST\",01-01-2009,12-31-9999,\"test_data5 v2 replace period_2 change\")","(\"Tue Jan 01 19:04:05 2013 PST\",03-01-2009,12-31-9999,\"test_data5 v3 forward period_2 change\")","(\"Wed Jan 01 19:04:05 2014 PST\",02-01-2009,12-31-9999,\"test_data5 v4 backdate period_2 change\")"} | 
 (5 rows)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_0_process();
- test_table_bitemporal_out_0_process 
--------------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_process_1();
+ test_table_bitemporal_process_1 
+---------------------------------
  t
 (1 row)
 
 SELECT  test_table_bitemporal_id, trans_period, valid_period, test_table_bitemporal_text
-FROM    put_data.test_table_bitemporal_out
+FROM    put_data.test_table_bitemporal
 ORDER BY test_table_bitemporal_id, trans_period, valid_period, test_table_bitemporal_text;
  test_table_bitemporal_id |           trans_period            |      valid_period       |       test_table_bitemporal_text       
 --------------------------+-----------------------------------+-------------------------+----------------------------------------
@@ -97,7 +97,7 @@ ORDER BY test_table_bitemporal_id, trans_period, valid_period, test_table_bitemp
 (7 rows)
 
 SELECT  test_table_bitemporal_id, trans_period, valid_period, test_table_bitemporal_text
-FROM    put_data.test_table_bitemporal_out_history
+FROM    put_data.test_table_bitemporal_history
 ORDER BY test_table_bitemporal_id, trans_period, valid_period, test_table_bitemporal_text;
  test_table_bitemporal_id |                          trans_period                           |      valid_period       |       test_table_bitemporal_text       
 --------------------------+-----------------------------------------------------------------+-------------------------+----------------------------------------
@@ -115,7 +115,7 @@ ORDER BY test_table_bitemporal_id, trans_period, valid_period, test_table_bitemp
 (11 rows)
 
 SELECT  test_table_bitemporal_id
-FROM    put_data.test_table_bitemporal_out_immutable
+FROM    put_data.test_table_bitemporal_immutable
 ORDER BY test_table_bitemporal_id;
  test_table_bitemporal_id 
 --------------------------
@@ -127,7 +127,7 @@ ORDER BY test_table_bitemporal_id;
 (5 rows)
 
 SELECT  test_table_bitemporal_id, trans_time, valid_period, test_table_bitemporal_text
-FROM    put_data.test_table_bitemporal_out_active
+FROM    put_data.test_table_bitemporal_active
 ORDER BY test_table_bitemporal_id, trans_time, valid_period, test_table_bitemporal_text;
  test_table_bitemporal_id |          trans_time          |      valid_period       |       test_table_bitemporal_text       
 --------------------------+------------------------------+-------------------------+----------------------------------------
@@ -141,7 +141,7 @@ ORDER BY test_table_bitemporal_id, trans_time, valid_period, test_table_bitempor
 (7 rows)
 
 SELECT  test_table_bitemporal_id, trans_time, valid_period, test_table_bitemporal_text
-FROM    put_data.test_table_bitemporal_out_current
+FROM    put_data.test_table_bitemporal_current
 ORDER BY test_table_bitemporal_id, trans_time, valid_period, test_table_bitemporal_text;
  test_table_bitemporal_id |          trans_time          | valid_period  |       test_table_bitemporal_text       
 --------------------------+------------------------------+---------------+----------------------------------------
@@ -153,7 +153,7 @@ ORDER BY test_table_bitemporal_id, trans_time, valid_period, test_table_bitempor
 (5 rows)
 
 SELECT  hold_reason_id, hold_reason_text, queue_priority
-FROM    processor_data.test_table_bitemporal_out_0_processed
+FROM    processor_data.test_table_bitemporal_processed_1
 ORDER BY id;
  hold_reason_id | hold_reason_text | queue_priority 
 ----------------+------------------+----------------
@@ -164,9 +164,9 @@ ORDER BY id;
                 |                  |               
 (5 rows)
 
-SELECT * FROM processor_data.test_table_bitemporal_out_0_push_status();
- test_table_bitemporal_out_0_push_status 
------------------------------------------
+SELECT * FROM processor_data.test_table_bitemporal_push_status_1();
+ test_table_bitemporal_push_status_1 
+-------------------------------------
  t
 (1 row)
 
