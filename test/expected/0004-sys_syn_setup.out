@@ -1,4 +1,3 @@
-CREATE EXTENSION pgcrypto;
 CREATE EXTENSION sys_syn;
 CREATE SCHEMA user_data
     AUTHORIZATION postgres;

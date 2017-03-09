@@ -114,6 +114,8 @@ CREATE TABLE sys_syn_dblink.table_types_def (
         attributes_array                boolean NOT NULL,
         table_create_proc_schema        regnamespace NOT NULL,
         table_create_proc_name          text NOT NULL,
+        table_drop_proc_schema          regnamespace NOT NULL,
+        table_drop_proc_name            text NOT NULL,
         put_sql_proc_schema             regnamespace NOT NULL,
         put_sql_proc_name               text NOT NULL,
         initial_table_settings          hstore DEFAULT ''::hstore NOT NULL,
@@ -145,8 +147,9 @@ CREATE TABLE sys_syn_dblink.put_table_transforms (
         new_table_type_id       text,
         table_settings          hstore DEFAULT ''::hstore NOT NULL,
         new_dblink_connname     text,
-        new_hold_cache_min_rows int,
-        new_remote_status_batch_rows bigint,
+--        new_hold_cache_min_rows int,
+        new_records_per_proc    int,
+        new_status_records_per_sql bigint,
 /*      new_queue_id            smallint,*/
         add_columns             sys_syn_dblink.create_put_column[] DEFAULT ARRAY[]::sys_syn_dblink.create_put_column[] NOT NULL,
         omit                    boolean,
@@ -225,8 +228,9 @@ CREATE TABLE sys_syn_dblink.proc_tables_def (
         put_table_name          text            NOT NULL,
         table_type_id           text            NOT NULL,
         table_settings          hstore          NOT NULL,
-        hold_cache_min_rows     int             NOT NULL,
-        remote_status_batch_rows bigint         NOT NULL,
+--      hold_cache_min_rows     int             NOT NULL,
+        records_per_proc        int             NOT NULL,
+        status_records_per_sql  bigint          NOT NULL,
         queue_count             smallint,
 /*      queue_id                smallint,*/
         comments                text DEFAULT '' NOT NULL,
@@ -317,19 +321,19 @@ ALTER TABLE sys_syn_dblink.proc_foreign_keys
 
 INSERT INTO sys_syn_dblink.table_types_def (
         table_type_id,                          attributes_array,
-        table_create_proc_schema,               table_create_proc_name,
+        table_create_proc_schema,       table_create_proc_name,         table_drop_proc_schema, table_drop_proc_name,
         put_sql_proc_schema,                    put_sql_proc_name,
         initial_table_settings)
 VALUES ('sys_syn-direct',                       false,
-        'sys_syn_dblink',                       'table_create_sql_direct',
+        'sys_syn_dblink',               'table_create_sql_direct',      'sys_syn_dblink',       'table_drop_sql_direct',
         'sys_syn_dblink',                       'put_sql_direct',
         ''),(
         'sys_syn-direct',                       true,
-        'sys_syn_dblink',                       'table_create_sql_direct_array',
+        'sys_syn_dblink',               'table_create_sql_direct_array','sys_syn_dblink',       'table_drop_sql_direct_array',
         'sys_syn_dblink',                       'put_sql_direct_array',
         ''),(
         'sys_syn-temporal',                     true,
-        'sys_syn_dblink',                       'table_create_sql_temporal',
+        'sys_syn_dblink',               'table_create_sql_temporal',    'sys_syn_dblink',       'table_drop_sql_temporal',
         'sys_syn_dblink',                       'put_sql_temporal_array',
         $$
                 sys_syn.temporal.active_table_name      => %1,
@@ -337,7 +341,7 @@ VALUES ('sys_syn-direct',                       false,
                 sys_syn.temporal.range_1.column_name    => %1
         $$),(
         'sys_syn-temporal',                     false,
-        'sys_syn_dblink',                       'table_create_sql_temporal',
+        'sys_syn_dblink',               'table_create_sql_temporal',    'sys_syn_dblink',       'table_drop_sql_temporal',
         'sys_syn_dblink',                       'put_sql_temporal',
         $$
                 sys_syn.temporal.active_table_name      => %1,
@@ -345,7 +349,7 @@ VALUES ('sys_syn-direct',                       false,
                 sys_syn.temporal.range_1.column_name    => %1
         $$),(
         'sys_syn-bitemporal',                   true,
-        'sys_syn_dblink',                       'table_create_sql_bitemporal',
+        'sys_syn_dblink',               'table_create_sql_bitemporal',  'sys_syn_dblink',       'table_drop_sql_bitemporal',
         'sys_syn_dblink',                       'put_sql_bitemporal_array',
         $$
                 sys_syn.bitemporal.active_table_name    => %1,
@@ -857,8 +861,8 @@ BEGIN
 
                                 IF _put_column_transform.priority = _last_priority THEN
                                         RAISE EXCEPTION
-                                     'More than 1 rule meets the criteria of relation ''%'' column ''%'' on the same priority (%).',
-                                                relation::text, _return_column.column_name, _put_column_transform.priority
+                                'More than 1 rule meets the criteria of proc_table_id ''%'' column ''%'' on the same priority (%).',
+                                                proc_table_id, _return_column.column_name, _put_column_transform.priority
                                                 USING HINT =
         'Change one of the rule''s priority.  If multiple rules are activated on the same priority, the code may be indeterminate.';
                                 END IF;
@@ -1129,15 +1133,16 @@ CREATE FUNCTION sys_syn_dblink.proc_table_create (
         out_group_id            text,
         put_group_id            text,
         proc_schema             regnamespace default null,
-        proc_table_id           text default null,
+        proc_table_id           text    default null,
         put_schema              regnamespace default null,
-        put_table_name          text default null,
-        table_type_id           text default 'sys_syn-direct',
-        table_settings          hstore default ''::hstore,
-        dblink_connname         text default 'sys_syn',
-        hold_cache_min_rows     int default 256,
-        remote_status_batch_rows bigint default 4096,
-        comments                text default '%1')
+        put_table_name          text    default null,
+        table_type_id           text    default 'sys_syn-direct',
+        table_settings          hstore  default ''::hstore,
+        dblink_connname         text    default 'sys_syn',
+--      hold_cache_min_rows     int     default   256,
+        records_per_proc        int     default 50000,
+        status_records_per_sql  bigint  default  4096,
+        comments                text    default '%1')
   RETURNS void AS
 $BODY$
 DECLARE
@@ -1161,7 +1166,6 @@ DECLARE
         _put_table_transform                    sys_syn_dblink.put_table_transforms%ROWTYPE;
         _rule_group_ids                         text[];
         _add_put_columns                        sys_syn_dblink.create_put_column[];
-        _table_settings                         hstore;
         _final_ids                              text[];
         _omit                                   boolean;
         _last_priority                          smallint;
@@ -1177,8 +1181,8 @@ BEGIN
                 COALESCE(proc_table_create.put_schema, current_schema()::regnamespace),
                 COALESCE(put_table_name, in_table_def.in_table_id),
 
-                proc_table_create.table_type_id,        proc_table_create.table_settings,
-                proc_table_create.hold_cache_min_rows,  proc_table_create.remote_status_batch_rows,
+                proc_table_create.table_type_id,
+                proc_table_create.records_per_proc,     proc_table_create.status_records_per_sql,
                 in_table_def.claim_queue_count,
                 replace(proc_table_create.comments, '%1', in_table_def.comments)
 
@@ -1193,8 +1197,8 @@ BEGIN
                 _proc_table_def.put_schema,
                 _proc_table_def.put_table_name,
 
-                _proc_table_def.table_type_id,          _proc_table_def.table_settings,
-                _proc_table_def.hold_cache_min_rows,    _proc_table_def.remote_status_batch_rows,
+                _proc_table_def.table_type_id,
+                _proc_table_def.records_per_proc,       _proc_table_def.status_records_per_sql,
                 _proc_table_def.queue_count,
                 _proc_table_def.comments
 
@@ -1229,7 +1233,7 @@ BEGIN
         _rule_group_ids := sys_syn_dblink.rule_group_ids_get(_proc_table_def);
 
         _add_put_columns                        := ARRAY[]::sys_syn_dblink.create_put_column[];
-        _table_settings                         := ''::hstore;
+        _proc_table_def.table_settings          := ''::hstore;
         _final_ids                              := ARRAY[]::TEXT[];
         _omit                                   := FALSE;
         _last_priority                          := -1;
@@ -1311,20 +1315,24 @@ BEGIN
                                      replace(_put_table_transform.new_dblink_connname, '%1', _proc_table_def.dblink_connname);
                         END IF;
 
-                        IF _put_table_transform.new_hold_cache_min_rows IS NOT NULL THEN
+/*                      IF _put_table_transform.new_hold_cache_min_rows IS NOT NULL THEN
                                 _proc_table_def.hold_cache_min_rows := _put_table_transform.new_hold_cache_min_rows;
+                        END IF;*/
+
+                        IF _put_table_transform.new_records_per_proc IS NOT NULL THEN
+                                _proc_table_def.records_per_proc := _put_table_transform.new_records_per_proc;
                         END IF;
 
-                        IF _put_table_transform.new_remote_status_batch_rows IS NOT NULL THEN
-                                _proc_table_def.remote_status_batch_rows := _put_table_transform.new_remote_status_batch_rows;
+                        IF _put_table_transform.new_status_records_per_sql IS NOT NULL THEN
+                                _proc_table_def.status_records_per_sql := _put_table_transform.new_status_records_per_sql;
                         END IF;
 
 /*                      IF _put_table_transform.new_queue_id IS NOT NULL THEN
                                 _proc_table_def.queue_id := _put_table_transform.new_queue_id;
                         END IF;*/
 
-                        _add_put_columns        := _add_put_columns     || _put_table_transform.add_columns;
-                        _table_settings         := _table_settings      || _put_table_transform.table_settings;
+                        _add_put_columns := _add_put_columns || _put_table_transform.add_columns;
+                        _proc_table_def.table_settings := _proc_table_def.table_settings || _put_table_transform.table_settings;
 
                         IF _put_table_transform.omit IS NOT NULL THEN
                                 _omit := _put_table_transform.omit;
@@ -1369,6 +1377,22 @@ BEGIN
                 RETURN;
         END IF;
 
+        IF _proc_table_def.table_type_id IS NULL THEN
+                RAISE EXCEPTION 'table_type_id is null.';
+        END IF;
+
+        _table_type_def := (
+                SELECT  table_types_def
+                FROM    sys_syn_dblink.table_types_def
+                WHERE   table_types_def.table_type_id           = _proc_table_def.table_type_id AND
+                        table_types_def.attributes_array        = _proc_table_def.attributes_array);
+
+        IF _table_type_def IS NULL THEN
+                RAISE EXCEPTION 'table_type_id not found.';
+        END IF;
+
+        _proc_table_def.table_settings := _table_type_def.initial_table_settings || _proc_table_def.table_settings ||table_settings;
+
         INSERT INTO sys_syn_dblink.proc_tables_def VALUES(_proc_table_def.*);
 
         _proc_table_def := (
@@ -1406,11 +1430,6 @@ BEGIN
                 FROM    sys_syn_dblink.proc_partitions_def JOIN generate_series(1, _proc_table_def.queue_count) ON TRUE
                 WHERE   proc_partitions_def.proc_table_id = _proc_table_def.proc_table_id;
         END IF;
-
-        SELECT  table_types_def.initial_table_settings || _table_settings
-        INTO    _table_settings
-        FROM    sys_syn_dblink.table_types_def
-        WHERE   table_types_def.table_type_id = _proc_table_def.table_type_id;
 
         _type_id_name           := _proc_table_def.proc_table_id||'_proc_id';
         _type_attributes_name   := _proc_table_def.proc_table_id||'_proc_attributes';
@@ -1561,20 +1580,6 @@ BEGIN
 
         DROP TABLE out_queue_data_view_columns_temp;
 
-        IF table_type_id IS NULL THEN
-                RAISE EXCEPTION 'table_type_id is null.';
-        END IF;
-
-        _table_type_def := (
-                SELECT  table_types_def
-                FROM    sys_syn_dblink.table_types_def
-                WHERE   table_types_def.table_type_id           = _proc_table_def.table_type_id AND
-                        table_types_def.attributes_array        = _proc_table_def.attributes_array);
-
-        IF _table_type_def IS NULL THEN
-                RAISE EXCEPTION 'table_type_id not found.';
-        END IF;
-
         _columns_proc   := sys_syn_dblink.proc_columns_get(_proc_table_def.proc_table_id);
         _columns_put    := sys_syn_dblink.put_columns_get(_proc_table_def.proc_table_id, _add_put_columns);
 
@@ -1617,7 +1622,7 @@ BEGIN
                         '($1, $2, $3, $4)'
                 INTO    _sql_buffer
                 USING   _proc_table_def.put_schema::text,       _proc_table_def.put_table_name,         _columns_put,
-                        _table_settings;
+                        _proc_table_def.table_settings;
                 EXECUTE _sql_buffer;
         END IF;
 
@@ -1627,7 +1632,7 @@ BEGIN
                 _proc_columns_attribute_unordered,      _proc_columns_nodiff,
                 _columns_put,
                 _type_id_name,                          _type_attributes_name,          _type_no_diff_name,
-                _table_settings);
+                _proc_table_def.table_settings);
 
         FOR     _proc_worker_def IN
         SELECT  *
@@ -1640,7 +1645,7 @@ BEGIN
                         _proc_columns_attribute_unordered,      _proc_columns_nodiff,
                         _columns_put,
                         _type_id_name,                          _type_attributes_name,          _type_no_diff_name,
-                        _table_settings,                        _proc_worker_def.worker_id,     _proc_worker_def.partition_id);
+                        _proc_table_def.table_settings,         _proc_worker_def.worker_id,     _proc_worker_def.partition_id);
         END LOOP;
 
         DROP TABLE put_sql_expressions_temp;
@@ -1659,8 +1664,9 @@ ALTER FUNCTION sys_syn_dblink.proc_table_create(
         table_type_id           text,
         table_settings          hstore,
         dblink_connname         text,
-        hold_cache_min_rows     int,
-        remote_status_batch_rows bigint,
+--      hold_cache_min_rows     int,
+        records_per_proc        int,
+        status_records_per_sql  bigint,
         comments                text)
   OWNER TO postgres;
 
@@ -1967,6 +1973,20 @@ $BODY$
 ALTER FUNCTION sys_syn_dblink.table_create_sql_direct(text, text, sys_syn_dblink.create_put_column[], hstore)
   OWNER TO postgres;
 
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+BEGIN
+        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION sys_syn_dblink.table_drop_sql_direct(text, text, hstore)
+  OWNER TO postgres;
 
 CREATE FUNCTION sys_syn_dblink.put_sql_direct (
         schema_name                     text,
@@ -2059,6 +2079,21 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 ALTER FUNCTION sys_syn_dblink.table_create_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], hstore)
+  OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct_array (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+BEGIN
+        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION sys_syn_dblink.table_drop_sql_direct_array(text, text, hstore)
   OWNER TO postgres;
 
 CREATE FUNCTION sys_syn_dblink.put_sql_direct_array (
@@ -2194,6 +2229,38 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 ALTER FUNCTION sys_syn_dblink.table_create_sql_temporal(text, text, sys_syn_dblink.create_put_column[], hstore)
+  OWNER TO postgres;
+
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_temporal (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+DECLARE
+        _table_name                     TEXT;
+        _table_name_sql                 TEXT;
+        _table_name_history             TEXT;
+        _table_name_history_sql         TEXT;
+BEGIN
+        _table_name             := REPLACE(
+                table_settings -> 'sys_syn.temporal.active_table_name',
+                '%1',
+                table_name);
+        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
+        _table_name_history             := REPLACE(
+                table_settings -> 'sys_syn.temporal.history_table_name',
+                '%1',
+                table_name);
+        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
+
+        EXECUTE 'DROP TABLE ' || _table_name_sql;
+        EXECUTE 'DROP TABLE ' || _table_name_history_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION sys_syn_dblink.table_drop_sql_temporal(text, text, hstore)
   OWNER TO postgres;
 
 CREATE FUNCTION sys_syn_dblink.put_sql_temporal (
@@ -2724,6 +2791,77 @@ $BODY$
 ALTER FUNCTION sys_syn_dblink.table_create_sql_bitemporal(text, text, sys_syn_dblink.create_put_column[], hstore)
   OWNER TO postgres;
 
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_bitemporal (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+DECLARE
+        _table_name                     TEXT;
+        _table_name_sql                 TEXT;
+        _table_name_immutable           TEXT;
+        _table_name_immutable_sql       TEXT;
+        _table_name_history             TEXT;
+        _table_name_history_sql         TEXT;
+        _view_name_current              TEXT;
+        _view_name_current_sql          TEXT;
+        _view_name_active               TEXT;
+        _view_name_active_sql           TEXT;
+        _trigger_name_insert            TEXT;
+        _trigger_name_insert_sql        TEXT;
+        _trigger_name_update            TEXT;
+        _trigger_name_update_sql        TEXT;
+        _trigger_name_delete            TEXT;
+        _trigger_name_delete_sql        TEXT;
+BEGIN
+        _table_name                     := REPLACE(
+                table_settings -> 'sys_syn.bitemporal.active_table_name',
+                '%1',
+                table_name);
+        _table_name_sql                 := schema_name::text || '.' || quote_ident(_table_name);
+        _table_name_immutable           := REPLACE(
+                table_settings -> 'sys_syn.bitemporal.immutable_table_name',
+                '%1',
+                table_name);
+        _table_name_immutable_sql       := schema_name::text || '.' || quote_ident(table_name||'_immutable');
+        _table_name_history             := REPLACE(
+                table_settings -> 'sys_syn.bitemporal.history_table_name',
+                '%1',
+                table_name);
+        _table_name_history_sql         := schema_name::text || '.' || quote_ident(_table_name_history);
+        _view_name_current              := REPLACE(
+                table_settings -> 'sys_syn.bitemporal.current_view_name',
+                '%1',
+                table_name);
+        _view_name_current_sql          := schema_name::text || '.' || quote_ident(_view_name_current);
+        _view_name_active               := REPLACE(
+                table_settings -> 'sys_syn.bitemporal.active_view_name',
+                '%1',
+                table_name);
+        _view_name_active_sql           := schema_name::text || '.' || quote_ident(_view_name_active);
+        _trigger_name_insert            := table_name||'_current_insert';
+        _trigger_name_insert_sql        := schema_name::text || '.' || quote_ident(_trigger_name_insert);
+        _trigger_name_update            := table_name||'_current_update';
+        _trigger_name_update_sql        := schema_name::text || '.' || quote_ident(_trigger_name_update);
+        _trigger_name_delete            := table_name||'_current_delete';
+        _trigger_name_delete_sql        := schema_name::text || '.' || quote_ident(_trigger_name_delete);
+
+        EXECUTE 'DROP VIEW ' || _view_name_current_sql;
+        EXECUTE 'DROP VIEW ' || _view_name_active_sql;
+        EXECUTE 'DROP TABLE ' || _table_name_sql;
+        EXECUTE 'DROP TABLE ' || _table_name_history_sql;
+        EXECUTE 'DROP TABLE ' || _table_name_immutable_sql;
+        EXECUTE 'DROP FUNCTION ' || _trigger_name_insert_sql || '()';
+        EXECUTE 'DROP FUNCTION ' || _trigger_name_update_sql || '()';
+        EXECUTE 'DROP FUNCTION ' || _trigger_name_delete_sql || '()';
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION sys_syn_dblink.table_drop_sql_bitemporal(text, text, hstore)
+  OWNER TO postgres;
+
 CREATE FUNCTION sys_syn_dblink.put_sql_bitemporal_array (
         schema_name                     text,
         table_name                      text,
@@ -3194,28 +3332,39 @@ CREATE FUNCTION $$||_name_process||$$()
         RETURNS boolean AS
 $DEFINITION$
 DECLARE
-        _processing_row         $$||_name_processing||$$%ROWTYPE;
+        _processing_rec         $$||_name_processing||$$%ROWTYPE;
         _processed_status       sys_syn_dblink.processed_status;
+        _records_per_proc       int;
 BEGIN
-        FOR     _processing_row IN
+        SELECT  proc_tables_def.records_per_proc
+        INTO    _records_per_proc
+        FROM    sys_syn_dblink.proc_tables_def
+        WHERE   proc_tables_def.proc_table_id = $$||quote_literal(proc_table_def.proc_table_id)||$$;
+
+        FOR     _processing_rec IN
         SELECT  *
         FROM    $$||_name_processing||$$
+        LIMIT   _records_per_proc
         LOOP
                 _processed_status := $$||_name_put||$$(
-                        _processing_row.trans_id_in,                    _processing_row.delta_type,
-                        _processing_row.queue_priority,                 _processing_row.hold_updated,
-                        _processing_row.prior_hold_reason_count,        _processing_row.prior_hold_reason_id,
-                        _processing_row.prior_hold_reason_text,         _processing_row.id,
-                        _processing_row.attributes,                     _processing_row.no_diff);
+                        _processing_rec.trans_id_in,                    _processing_rec.delta_type,
+                        _processing_rec.queue_priority,                 _processing_rec.hold_updated,
+                        _processing_rec.prior_hold_reason_count,        _processing_rec.prior_hold_reason_id,
+                        _processing_rec.prior_hold_reason_text,         _processing_rec.id,
+                        _processing_rec.attributes,                     _processing_rec.no_diff);
 
                 INSERT INTO $$||_name_processed||$$ (
                         id,                                             hold_reason_id,
                         hold_reason_text,                               queue_priority,
                         processed_time)
-                VALUES (_processing_row.id,                             _processed_status.hold_reason_id,
+                VALUES (_processing_rec.id,                             _processed_status.hold_reason_id,
                         _processed_status.hold_reason_text,             _processed_status.queue_priority,
                         COALESCE(_processed_status.processed_time, CURRENT_TIMESTAMP));
+
+                DELETE FROM $$||_name_processing||$$ AS processing
+                WHERE   processing.id = _processing_rec.id;
         END LOOP;
+
         RETURN FOUND;
 END
 $DEFINITION$
@@ -3247,7 +3396,7 @@ BEGIN
                 FROM    sys_syn_dblink.proc_tables_def
                 WHERE   proc_tables_def.proc_table_id = $$||quote_literal(proc_table_def.proc_table_id)||$$);
 
-        _limit := _proc_table_def.remote_status_batch_rows;
+        _limit := _proc_table_def.status_records_per_sql;
 
         LOOP -- NOTE:  This is not a FOR loop.
                 SELECT  $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(id,hold_reason_id,hold_reason_text,queue_id,
@@ -3312,6 +3461,8 @@ DECLARE
         _proc_table_def                 sys_syn_dblink.proc_tables_def;
         _object_id                      TEXT;
         _sql_command_prefix             TEXT;
+        _table_type_def                 sys_syn_dblink.table_types_def;
+        _sql_buffer                     TEXT;
         _sql_name_type_proc_id          TEXT;
         _sql_name_type_proc_attributes  TEXT;
         _sql_name_type_proc_no_diff     TEXT;
@@ -3324,7 +3475,7 @@ BEGIN
 
         IF _proc_table_def IS NULL THEN
                 RAISE EXCEPTION 'Cannot find proc_table_id ''%''.', proc_table_drop.proc_table_id
-                USING HINT = 'Check the proc_tables_def table.';
+                USING HINT = 'Check to see if this ID is defined in the sys_syn_dblink.proc_tables_def table.';
         END IF;
 
         _object_id := _proc_table_def.proc_table_id;
@@ -3348,8 +3499,18 @@ BEGIN
                 ', ' || _sql_name_type_proc_no_diff || ')';
 
         IF drop_put_table THEN
-                EXECUTE 'DROP TABLE ' || _proc_table_def.put_schema::text || '.' ||
-                        quote_ident(_proc_table_def.put_table_name);
+                _table_type_def := (
+                        SELECT  table_types_def
+                        FROM    sys_syn_dblink.table_types_def
+                        WHERE   table_types_def.table_type_id   = _proc_table_def.table_type_id AND
+                                table_types_def.attributes_array= _proc_table_def.attributes_array);
+
+                EXECUTE 'SELECT '||_table_type_def.table_drop_proc_schema::text||'.'||
+                                quote_ident(_table_type_def.table_drop_proc_name)||
+                        '($1, $2, $3)'
+                INTO    _sql_buffer
+                USING   _proc_table_def.put_schema::text, _proc_table_def.put_table_name, _proc_table_def.table_settings;
+                EXECUTE _sql_buffer;
         END IF;
 
         _sql_command_prefix := 'DROP TYPE '|| _proc_table_def.proc_schema::text || '.';

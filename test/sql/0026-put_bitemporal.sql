@@ -36,7 +36,6 @@ SELECT sys_syn_dblink.proc_table_create (
         table_type_id   => 'sys_syn-bitemporal',
         dblink_connname => 'sys_syn_test');
 
-
 SELECT * FROM processor_data.test_table_bitemporal_claim_1();
 
 SELECT * FROM processor_data.test_table_bitemporal_pull_1();

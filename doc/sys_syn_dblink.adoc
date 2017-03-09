@@ -63,7 +63,7 @@ The runtime workflow is (including `sys_syn` procedures):
 
 The setup workflow is:
 
-* Install the `sys_syn` extension and its dependencies on the database that pulls the data, configure it, and add tables.
+* Install the `sys_syn` extension on the database that pulls the data, configure it, and add tables.
 
 * Install the `hstore`, `dblink`, and `sys_syn_dblink` extensions on the database that receives the data.
 
@@ -77,7 +77,7 @@ The setup workflow is:
 
 * Optionally add column transform rules to `sys_syn_dblink.put_column_transforms`.
 
-* Call `sys_syn_dblink.proc_table_create` for each table that you are bringing into this database.
+* Create 1 or more process tables (`sys_syn_dblink.proc_table_create`).
 
 
 
@@ -92,13 +92,12 @@ Usage requirements:
 - PostgreSQL 9.5 or above.
 - The `hstore` PostgreSQL extension.
 - The `dblink` PostgreSQL extension.
-- The `sys_syn` and `pgcrypto` PostgreSQL extensions installed and used on the database that you are connecting to.  These are not required for the database that needs sys_syn_dblink installed on it.
+- The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.  This is not required for the database that needs sys_syn_dblink installed on it.
 - The `temporal_tables` PostgreSQL extension if you use the temporal or bitemporal table_types.
 
 Test requirements:
 
 - The `tinyint` PostgreSQL extension.
-- The `pgcrypto` PostgreSQL extension.
 - The `sys_syn` PostgreSQL extension.
 - The `temporal_tables` PostgreSQL extension.
 
@@ -149,7 +148,6 @@ The following examples assume the following schema and data:
 
 [source,sql]
 ----
-CREATE EXTENSION pgcrypto;
 CREATE EXTENSION sys_syn;
 
 INSERT INTO sys_syn.settings(cluster_id) VALUES ('sys_syn_dblink-test');
@@ -316,7 +314,9 @@ This pulls the records across the `dblink` connection.
 SELECT * FROM processor_data.test_table_pull_1();
 ----
 
-A boolean is returned.  False indicates that there are no records in the queue and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
+A boolean is returned.  False indicates that there are no records in the queue and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run and that you may need to call this function again, after completing all of the following steps, to pull another batch of records.
+
+WARNING:  This function only pulls a limited batch of records.  Repeat the pull, process, and push status steps until this function returns false.
 
 
 
@@ -329,7 +329,9 @@ This processes the records.  The `dblink` connection is not used for this step.
 SELECT * FROM processor_data.test_table_process_1();
 ----
 
-A boolean is returned.  False indicates that there were no records processed and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
+A boolean is returned.  False indicates that there were no records processed and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run and that you may need to call this function again, after completing the following steps, to process another batch of records.
+
+WARNING:  This function only processes a limited batch of records.  Repeat the process and push status steps until this function returns false.
 
 
 
@@ -350,7 +352,7 @@ A boolean is returned.  False indicates that there are no statuses to push.  Tru
 
 ===== put_column_transforms
 
-When new tables are added, the rules in this table adds, modifies, or removes columns.  The rule is applied when all criteria that is specified in the rule are true.
+When new tables are added, the rules in the `sys_syn_dblink.put_column_transforms` table adds, modifies, or removes columns.  The rule is applied when all criteria that is specified in the rule are true.
 
 .Columns
 rule_group_id::
@@ -388,9 +390,9 @@ column_name_like::
 data_type_like::
     The rule is applied to the column when the data type matches this `LIKE` pattern.
 primary_in_table_id_like::
-    The rule is applied to the column when the foreign or primary key points to an in_table_id that matches this `LIKE` pattern.  The primary_column_name_like column is required when this is used.
+    The rule is applied to the column when the foreign or primary key points to an `in_table_id` that matches this `LIKE` pattern.  The primary_column_name_like column is required when this is used.
 primary_column_name_like::
-    The rule is applied to the column when the foreign or primary key points to a column_name that matches this `LIKE` pattern.  The primary_in_table_id_like column is required when this is used.
+    The rule is applied to the column when the foreign or primary key points to a `column_name` that matches this `LIKE` pattern.  The primary_in_table_id_like column is required when this is used.
 new_data_type::
     Change the column's data type to this.
 new_in_column_type::

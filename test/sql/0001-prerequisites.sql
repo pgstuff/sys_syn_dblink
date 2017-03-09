@@ -10,8 +10,6 @@ END$$;
 
 CREATE EXTENSION hstore;
 
-CREATE EXTENSION pgcrypto;
-
 CREATE EXTENSION sys_syn;
 
 CREATE EXTENSION dblink;

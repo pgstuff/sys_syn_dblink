@@ -1,7 +1,5 @@
 BEGIN;
 
-CREATE EXTENSION pgcrypto;
-
 CREATE EXTENSION sys_syn;
 
 CREATE EXTENSION hstore;
