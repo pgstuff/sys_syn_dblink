@@ -119,9 +119,12 @@ SELECT sys_syn.in_table_create_sql('"User Data"."Test Table"'::regclass, 'In Gro
                  changes_pre_sql         => NULL,                                                          +
                  full_post_sql           => NULL,                                                          +
                  changes_post_sql        => NULL,                                                          +
-                 enable_deletes_implied  => TRUE,                                                          +
+                 enable_deletes_implied  => 'true',                                                        +
+                 key_violation_handler   => 'none'::sys_syn.key_violation_handler,                         +
                  full_prepull_id         => NULL,                                                          +
                  changes_prepull_id      => NULL,                                                          +
+                 record_comparison_different=>NULL,                                                        +
+                 record_comparison_same  => NULL,                                                          +
                  in_partitions           => ARRAY[                                                         +
                          $PART$("",)$PART$]::sys_syn.create_in_partition[]                                 +
          );

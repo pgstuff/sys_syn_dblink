@@ -1,13 +1,13 @@
 SET client_min_messages = warning;
 
 CREATE SCHEMA sys_syn_dblink;
-ALTER SCHEMA sys_syn_dblink OWNER TO postgres;
+COMMENT ON SCHEMA sys_syn_dblink IS '';
 
 CREATE TYPE sys_syn_dblink.delta_type AS ENUM (
         'Add',
         'Change',
         'Delete');
-ALTER TYPE sys_syn_dblink.delta_type OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.delta_type IS '';
 
 CREATE TYPE sys_syn_dblink.in_column_type AS ENUM (
         'Id',
@@ -15,20 +15,20 @@ CREATE TYPE sys_syn_dblink.in_column_type AS ENUM (
         'NoDiff',
         'TransIdIn'
 );
-ALTER TYPE sys_syn_dblink.in_column_type OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.in_column_type IS '';
 
 CREATE TYPE sys_syn_dblink.column_position_method AS ENUM (
         'Here',
         'Column',
         'InColumnType');
-ALTER TYPE sys_syn_dblink.column_position_method OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.column_position_method IS '';
 
 CREATE TYPE sys_syn_dblink.processed_status AS (
         hold_reason_id          integer,
         hold_reason_text        text,
         queue_priority          smallint,
         processed_time          timestamp with time zone);
-ALTER TYPE sys_syn_dblink.processed_status OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.processed_status IS '';
 
 CREATE TYPE sys_syn_dblink.create_put_column AS (
         column_name             text,
@@ -41,7 +41,7 @@ CREATE TYPE sys_syn_dblink.create_put_column AS (
         pos_ref_column_names_like text[],
         pos_in_column_type      sys_syn_dblink.in_column_type
 );
-ALTER TYPE sys_syn_dblink.create_put_column OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.create_put_column IS '';
 
 CREATE TYPE sys_syn_dblink.create_proc_column AS (
         column_name             text,
@@ -49,18 +49,18 @@ CREATE TYPE sys_syn_dblink.create_proc_column AS (
         in_column_type          sys_syn_dblink.in_column_type,
         array_order             smallint
 );
-ALTER TYPE sys_syn_dblink.create_proc_column OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.create_proc_column IS '';
 
 CREATE TYPE sys_syn_dblink.put_code_sql AS (
         declarations_sql       text,
         logic_sql              text
 );
-ALTER TYPE sys_syn_dblink.put_code_sql OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.put_code_sql IS '';
 
 CREATE TYPE sys_syn_dblink.exception_trap AS (
         when_conditions text[],
         statements_sql  text);
-ALTER TYPE sys_syn_dblink.exception_trap OWNER TO postgres;
+COMMENT ON TYPE sys_syn_dblink.exception_trap IS '';
 
 
 CREATE TABLE sys_syn_dblink.out_groups_def (
@@ -71,7 +71,7 @@ CREATE TABLE sys_syn_dblink.out_groups_def (
         rule_group_ids          text[],
         comments                text DEFAULT '' NOT NULL
 );
-ALTER TABLE sys_syn_dblink.out_groups_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.out_groups_def IS '';
 ALTER TABLE ONLY sys_syn_dblink.out_groups_def
         ADD CONSTRAINT out_groups_def_pkey PRIMARY KEY (cluster_id, out_group_id);
 ALTER TABLE sys_syn_dblink.out_groups_def
@@ -87,7 +87,7 @@ CREATE TABLE sys_syn_dblink.in_groups_def (
         rule_group_ids          text[],
         comments                text DEFAULT '' NOT NULL
 );
-ALTER TABLE sys_syn_dblink.in_groups_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.in_groups_def IS '';
 ALTER TABLE ONLY sys_syn_dblink.in_groups_def
         ADD CONSTRAINT in_groups_def_pkey PRIMARY KEY (cluster_id, in_group_id);
 ALTER TABLE sys_syn_dblink.in_groups_def
@@ -101,7 +101,7 @@ CREATE TABLE sys_syn_dblink.put_groups_def (
         rule_group_ids          text[],
         comments                text DEFAULT '' NOT NULL
 );
-ALTER TABLE sys_syn_dblink.put_groups_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.put_groups_def IS '';
 ALTER TABLE ONLY sys_syn_dblink.put_groups_def
         ADD CONSTRAINT put_groups_def_pkey PRIMARY KEY (put_group_id);
 ALTER TABLE sys_syn_dblink.put_groups_def
@@ -122,7 +122,7 @@ CREATE TABLE sys_syn_dblink.table_types_def (
         comments                        text DEFAULT '' NOT NULL,
         CONSTRAINT table_types_def_pkey PRIMARY KEY (table_type_id, attributes_array)
 );
-ALTER TABLE sys_syn_dblink.table_types_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.table_types_def IS '';
 
 CREATE TABLE sys_syn_dblink.put_table_transforms (
         rule_group_id           text,
@@ -149,7 +149,7 @@ CREATE TABLE sys_syn_dblink.put_table_transforms (
         new_dblink_connname     text,
 --        new_hold_cache_min_rows int,
         new_records_per_proc    int,
-        new_status_records_per_sql bigint,
+        new_remote_sql_len_max  int,
 /*      new_queue_id            smallint,*/
         add_columns             sys_syn_dblink.create_put_column[] DEFAULT ARRAY[]::sys_syn_dblink.create_put_column[] NOT NULL,
         omit                    boolean,
@@ -157,7 +157,7 @@ CREATE TABLE sys_syn_dblink.put_table_transforms (
         final_rule              boolean DEFAULT FALSE NOT NULL,
         comments                text DEFAULT '' NOT NULL
 );
-ALTER TABLE sys_syn_dblink.put_table_transforms OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.put_table_transforms IS '';
 ALTER TABLE sys_syn_dblink.put_table_transforms
         ADD CONSTRAINT priority_disallow_sign CHECK (priority >= 0);
 CREATE UNIQUE INDEX ON sys_syn_dblink.put_table_transforms (
@@ -205,7 +205,7 @@ CREATE TABLE sys_syn_dblink.put_column_transforms (
         delta_types             sys_syn_dblink.delta_type[] DEFAULT ARRAY['Add','Change','Delete']::sys_syn_dblink.delta_type[],
         comments                text DEFAULT '' NOT NULL
 );
-ALTER TABLE sys_syn_dblink.put_column_transforms OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.put_column_transforms IS '';
 ALTER TABLE sys_syn_dblink.put_column_transforms
         ADD CONSTRAINT priority_disallow_sign CHECK (priority >= 0);
 CREATE UNIQUE INDEX ON sys_syn_dblink.put_column_transforms (
@@ -230,13 +230,13 @@ CREATE TABLE sys_syn_dblink.proc_tables_def (
         table_settings          hstore          NOT NULL,
 --      hold_cache_min_rows     int             NOT NULL,
         records_per_proc        int             NOT NULL,
-        status_records_per_sql  bigint          NOT NULL,
+        remote_sql_len_max      int             NOT NULL,
         queue_count             smallint,
 /*      queue_id                smallint,*/
         comments                text DEFAULT '' NOT NULL,
         CONSTRAINT proc_tables_def_pkey PRIMARY KEY (proc_table_id)
 );
-ALTER TABLE sys_syn_dblink.proc_tables_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.proc_tables_def IS '';
 ALTER TABLE ONLY sys_syn_dblink.proc_tables_def
         ADD CONSTRAINT proc_tables_def_in_group_id_fkey FOREIGN KEY (cluster_id, in_group_id)
                 REFERENCES sys_syn_dblink.in_groups_def(cluster_id, in_group_id)
@@ -259,7 +259,7 @@ CREATE TABLE sys_syn_dblink.proc_partitions_def (
         partition_id            smallint        NOT NULL,
         comments                text            NOT NULL DEFAULT ''
 );
-ALTER TABLE sys_syn_dblink.proc_partitions_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.proc_partitions_def IS '';
 ALTER TABLE ONLY sys_syn_dblink.proc_partitions_def
         ADD CONSTRAINT proc_partitions_def_pkey PRIMARY KEY (proc_table_id, partition_id);
 ALTER TABLE sys_syn_dblink.proc_partitions_def
@@ -277,7 +277,7 @@ CREATE TABLE sys_syn_dblink.proc_workers_def (
         queue_id                smallint,
         comments                text            NOT NULL DEFAULT ''
 );
-ALTER TABLE sys_syn_dblink.proc_workers_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.proc_workers_def IS '';
 ALTER TABLE ONLY sys_syn_dblink.proc_workers_def
         ADD CONSTRAINT proc_workers_def_pkey PRIMARY KEY (proc_table_id, worker_id);
 ALTER TABLE sys_syn_dblink.proc_workers_def
@@ -294,7 +294,7 @@ CREATE TABLE sys_syn_dblink.proc_columns_def (
         array_order     smallint,
         CONSTRAINT proc_columns_def_pkey PRIMARY KEY (proc_table_id, column_name)
 );
-ALTER TABLE sys_syn_dblink.proc_columns_def OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.proc_columns_def IS '';
 
 CREATE TABLE sys_syn_dblink.proc_foreign_keys (
         cluster_id              text    NOT NULL,
@@ -304,7 +304,7 @@ CREATE TABLE sys_syn_dblink.proc_foreign_keys (
         foreign_column_name     text    NOT NULL,
         primary_column_name     text    NOT NULL
 );
-ALTER TABLE sys_syn_dblink.proc_foreign_keys OWNER TO postgres;
+COMMENT ON TABLE sys_syn_dblink.proc_foreign_keys IS '';
 ALTER TABLE ONLY sys_syn_dblink.proc_foreign_keys
         ADD CONSTRAINT proc_foreign_keys_pkey
                 PRIMARY KEY (cluster_id, foreign_proc_table_id, foreign_key_index, foreign_column_name);
@@ -374,7 +374,7 @@ BEGIN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-ALTER FUNCTION sys_syn_dblink.table_types_def_check_new() OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_types_def_check_new() IS '';
 
 CREATE FUNCTION sys_syn_dblink.table_types_def_check_old () RETURNS TRIGGER AS $$
 BEGIN
@@ -385,7 +385,7 @@ BEGIN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-ALTER FUNCTION sys_syn_dblink.table_types_def_check_old() OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_types_def_check_old() IS '';
 
 CREATE CONSTRAINT TRIGGER table_types_def_check_new
         AFTER INSERT OR UPDATE ON sys_syn_dblink.table_types_def
@@ -405,7 +405,7 @@ BEGIN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-ALTER FUNCTION sys_syn_dblink.put_table_transforms_check_new() OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_table_transforms_check_new() IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_table_transforms_check_old () RETURNS TRIGGER AS $$
 BEGIN
@@ -416,7 +416,7 @@ BEGIN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-ALTER FUNCTION sys_syn_dblink.put_table_transforms_check_old() OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_table_transforms_check_old() IS '';
 
 CREATE CONSTRAINT TRIGGER put_table_transforms_check_new
         AFTER INSERT OR UPDATE ON sys_syn_dblink.put_table_transforms
@@ -436,7 +436,7 @@ BEGIN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-ALTER FUNCTION sys_syn_dblink.put_column_transforms_check_new() OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_column_transforms_check_new() IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_column_transforms_check_old () RETURNS TRIGGER AS $$
 BEGIN
@@ -447,7 +447,7 @@ BEGIN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-ALTER FUNCTION sys_syn_dblink.put_column_transforms_check_old() OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_column_transforms_check_old() IS '';
 
 CREATE CONSTRAINT TRIGGER put_column_transforms_check_new
         AFTER INSERT OR UPDATE ON sys_syn_dblink.put_column_transforms
@@ -490,8 +490,8 @@ END
 $BODY$
   LANGUAGE plpgsql STABLE
   COST 10;
-ALTER FUNCTION sys_syn_dblink.table_primary_key_name(proc_schema regnamespace, table_name text)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_primary_key_name(proc_schema regnamespace, table_name text)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.proc_columns_get (
         proc_table_id   text)
@@ -578,8 +578,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.proc_columns_get(text)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.proc_columns_get(text)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.rule_group_ids_get (_proc_table_def sys_syn_dblink.proc_tables_def)
   RETURNS text[] AS
@@ -665,8 +665,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.rule_group_ids_get(sys_syn_dblink.proc_tables_def)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.rule_group_ids_get(sys_syn_dblink.proc_tables_def)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_columns_get (
         proc_table_id   text,
@@ -999,8 +999,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_columns_get(text, sys_syn_dblink.create_put_column[])
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_columns_get(text, sys_syn_dblink.create_put_column[])
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.proc_columns_format (
         put_columns             sys_syn_dblink.create_proc_column[],
@@ -1046,8 +1046,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.proc_columns_format(sys_syn_dblink.create_proc_column[], text, text)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.proc_columns_format(sys_syn_dblink.create_proc_column[], text, text)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_columns_format (
         put_columns             sys_syn_dblink.create_put_column[],
@@ -1091,8 +1091,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_columns_format(sys_syn_dblink.create_put_column[], text, text)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_columns_format(sys_syn_dblink.create_put_column[], text, text)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_column_format (
         put_column      sys_syn_dblink.create_put_column,
@@ -1124,8 +1124,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_column_format(sys_syn_dblink.create_put_column, text)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_column_format(sys_syn_dblink.create_put_column, text)
+  IS '';
 
 
 CREATE FUNCTION sys_syn_dblink.proc_table_create (
@@ -1139,9 +1139,9 @@ CREATE FUNCTION sys_syn_dblink.proc_table_create (
         table_type_id           text    default 'sys_syn-direct',
         table_settings          hstore  default ''::hstore,
         dblink_connname         text    default 'sys_syn',
---      hold_cache_min_rows     int     default   256,
-        records_per_proc        int     default 50000,
-        status_records_per_sql  bigint  default  4096,
+--      hold_cache_min_rows     int     default    256,
+        records_per_proc        int     default  50000,
+        remote_sql_len_max      int     default 262144,
         comments                text    default '%1')
   RETURNS void AS
 $BODY$
@@ -1182,7 +1182,7 @@ BEGIN
                 COALESCE(put_table_name, in_table_def.in_table_id),
 
                 proc_table_create.table_type_id,
-                proc_table_create.records_per_proc,     proc_table_create.status_records_per_sql,
+                proc_table_create.records_per_proc,     proc_table_create.remote_sql_len_max,
                 in_table_def.claim_queue_count,
                 replace(proc_table_create.comments, '%1', in_table_def.comments)
 
@@ -1198,7 +1198,7 @@ BEGIN
                 _proc_table_def.put_table_name,
 
                 _proc_table_def.table_type_id,
-                _proc_table_def.records_per_proc,       _proc_table_def.status_records_per_sql,
+                _proc_table_def.records_per_proc,       _proc_table_def.remote_sql_len_max,
                 _proc_table_def.queue_count,
                 _proc_table_def.comments
 
@@ -1323,8 +1323,8 @@ BEGIN
                                 _proc_table_def.records_per_proc := _put_table_transform.new_records_per_proc;
                         END IF;
 
-                        IF _put_table_transform.new_status_records_per_sql IS NOT NULL THEN
-                                _proc_table_def.status_records_per_sql := _put_table_transform.new_status_records_per_sql;
+                        IF _put_table_transform.new_remote_sql_len_max IS NOT NULL THEN
+                                _proc_table_def.remote_sql_len_max := _put_table_transform.new_remote_sql_len_max;
                         END IF;
 
 /*                      IF _put_table_transform.new_queue_id IS NOT NULL THEN
@@ -1653,7 +1653,7 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.proc_table_create(
+COMMENT ON FUNCTION sys_syn_dblink.proc_table_create(
         in_table_id             text,
         out_group_id            text,
         put_group_id            text,
@@ -1666,9 +1666,9 @@ ALTER FUNCTION sys_syn_dblink.proc_table_create(
         dblink_connname         text,
 --      hold_cache_min_rows     int,
         records_per_proc        int,
-        status_records_per_sql  bigint,
+        remote_sql_len_max      int,
         comments                text)
-  OWNER TO postgres;
+  IS '';
 
 
 CREATE FUNCTION sys_syn_dblink.proc_table_create_worker (
@@ -1747,8 +1747,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 20;
-ALTER FUNCTION sys_syn_dblink.proc_table_create_worker(text, smallint)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.proc_table_create_worker(text, smallint)
+  IS '';
 
 
 CREATE FUNCTION sys_syn_dblink.put_columns_query_unique_index (
@@ -1781,8 +1781,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 20;
-ALTER FUNCTION sys_syn_dblink.put_columns_query_unique_index(sys_syn_dblink.create_put_column[], BOOLEAN)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_columns_query_unique_index(sys_syn_dblink.create_put_column[], BOOLEAN)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_columns_query (
         put_columns             sys_syn_dblink.create_put_column[],
@@ -1805,9 +1805,9 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 20;
-ALTER FUNCTION sys_syn_dblink.put_columns_query(sys_syn_dblink.create_put_column[], sys_syn_dblink.in_column_type[], BOOLEAN,
+COMMENT ON FUNCTION sys_syn_dblink.put_columns_query(sys_syn_dblink.create_put_column[], sys_syn_dblink.in_column_type[], BOOLEAN,
         BOOLEAN)
-  OWNER TO postgres;
+  IS '';
 
 
 CREATE TEMPORARY TABLE put_sql_expressions_temp (
@@ -1901,8 +1901,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_expressions(sys_syn_dblink.in_column_type[], sys_syn_dblink.delta_type[], smallint)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_expressions(sys_syn_dblink.in_column_type[], sys_syn_dblink.delta_type[], smallint)
+  IS '';
 
 DROP TABLE put_sql_expressions_temp;
 
@@ -1934,8 +1934,8 @@ END
 $BODY$
   LANGUAGE plpgsql IMMUTABLE
   COST 30;
-ALTER FUNCTION sys_syn_dblink.range_from_data_type(text)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.range_from_data_type(text)
+  IS '';
 
 
 -- direct
@@ -1970,8 +1970,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_create_sql_direct(text, text, sys_syn_dblink.create_put_column[], hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_direct(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct (
         schema_name                     text,
@@ -1985,8 +1985,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_drop_sql_direct(text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_direct(text, text, hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_sql_direct (
         schema_name                     text,
@@ -2046,8 +2046,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_direct(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_direct(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
+  IS '';
 
 --- direct_array
 
@@ -2078,8 +2078,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_create_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct_array (
         schema_name                     text,
@@ -2093,8 +2093,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_drop_sql_direct_array(text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_direct_array(text, text, hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_sql_direct_array (
         schema_name                     text,
@@ -2139,8 +2139,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+        hstore) IS '';
 
 --- temporal
 
@@ -2228,8 +2228,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_create_sql_temporal(text, text, sys_syn_dblink.create_put_column[], hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_temporal(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.table_drop_sql_temporal (
         schema_name                     text,
@@ -2260,8 +2260,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_drop_sql_temporal(text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_temporal(text, text, hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_sql_temporal (
         schema_name                     text,
@@ -2341,8 +2341,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_temporal(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_temporal(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_sql_temporal_array (
         schema_name                     text,
@@ -2449,8 +2449,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_temporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_temporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+        hstore) IS '';
 
 -- bitemporal
 
@@ -2490,8 +2490,8 @@ BEGIN
         RETURN _return;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-ALTER FUNCTION sys_syn_dblink.bitemporal_prefer_following(daterange[], DATE, DATE, DATE)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.bitemporal_prefer_following(daterange[], DATE, DATE, DATE)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.table_create_sql_bitemporal (
         schema_name                     text,
@@ -2788,8 +2788,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_create_sql_bitemporal(text, text, sys_syn_dblink.create_put_column[], hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_bitemporal(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.table_drop_sql_bitemporal (
         schema_name                     text,
@@ -2859,8 +2859,8 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.table_drop_sql_bitemporal(text, text, hstore)
-  OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_bitemporal(text, text, hstore)
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.put_sql_bitemporal_array (
         schema_name                     text,
@@ -2978,9 +2978,9 @@ END
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
-ALTER FUNCTION sys_syn_dblink.put_sql_bitemporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_bitemporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
         hstore)
-  OWNER TO postgres;
+  IS '';
 
 -- end
 
@@ -3007,10 +3007,10 @@ END
 $BODY$
   LANGUAGE plpgsql STABLE
   COST 80;
-ALTER FUNCTION sys_syn_dblink.column_type_value_row(
+COMMENT ON FUNCTION sys_syn_dblink.column_type_value_row(
         proc_table_id           text,
         value_expression        text)
-  OWNER TO postgres;
+  IS '';
 
 
 CREATE FUNCTION sys_syn_dblink.proc_table_code (
@@ -3106,11 +3106,11 @@ $$;
         EXECUTE _sql_buffer;
 END;
 $_$;
-ALTER FUNCTION sys_syn_dblink.proc_table_code(sys_syn_dblink.proc_tables_def, sys_syn_dblink.table_types_def,
+COMMENT ON FUNCTION sys_syn_dblink.proc_table_code(sys_syn_dblink.proc_tables_def, sys_syn_dblink.table_types_def,
         sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[],
         sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_put_column[],
         text, text, text, hstore)
-  OWNER TO postgres;
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.proc_table_code (
         proc_table_def                          sys_syn_dblink.proc_tables_def,
@@ -3379,13 +3379,16 @@ CREATE FUNCTION $$||_name_push_status||$$()
         RETURNS boolean AS
 $DEFINITION$
 DECLARE
-        _remote_found           boolean;
-        _remote_dispatched      boolean;
         _queue_id               smallint;
-        _remote_sql             text;
         _proc_table_def         sys_syn_dblink.proc_tables_def;
-        _limit                  bigint;
-        _offset                 bigint := 0;
+        _processed_rec          $$||_name_processed||$$%ROWTYPE;
+        _remote_sql_len_max     int;
+        _remote_sql             text;
+        _remote_sql_len         int;
+        _sql_value              text;
+        _sent_first_remote      boolean := false;
+        _remote_dispatched      boolean;
+        _remote_found           boolean;
 BEGIN
         SELECT  queue_status.queue_id
         INTO    _queue_id
@@ -3396,36 +3399,74 @@ BEGIN
                 FROM    sys_syn_dblink.proc_tables_def
                 WHERE   proc_tables_def.proc_table_id = $$||quote_literal(proc_table_def.proc_table_id)||$$);
 
-        _limit := _proc_table_def.status_records_per_sql;
+        _remote_sql_len_max     := 524288; -- _proc_table_def.remote_sql_len_max;
+        _remote_sql             := $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(id,hold_reason_id,$DBL$ ||
+                                        $DBL$hold_reason_text,queue_id,queue_priority,processed_time)VALUES$DBL$ || E'\n';
+        _remote_sql_len := 0;
 
-        LOOP -- NOTE:  This is not a FOR loop.
-                SELECT  $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(id,hold_reason_id,hold_reason_text,queue_id,
-                        queue_priority,processed_time) VALUES $DBL$ || array_to_string(array_agg('(' || $$ ||
-                        sys_syn_dblink.column_type_value_row(
-                                proc_table_def.proc_table_id, 'id') ||
-                        $$ || ',' ||
-                        quote_nullable(hold_reason_id) || ',' || quote_nullable(hold_reason_text) || ',' ||
-                        quote_nullable(_queue_id) || ',' || quote_nullable(queue_priority) || ',' ||
-                        quote_nullable(processed_time) || ')'), E',\n')
-                INTO    _remote_sql
-                FROM    $$||_name_processed||$$
-                LIMIT   _limit OFFSET _offset;
+        FOR     _processed_rec IN
+        SELECT  *
+        FROM    $$||_name_processed||$$
+        LOOP
+                _sql_value := '(' ||
+                        $$ || sys_syn_dblink.column_type_value_row(proc_table_def.proc_table_id, '_processed_rec.id') || $$ || ','||
+                        quote_nullable(_processed_rec.hold_reason_id) || ',' ||
+                        quote_nullable(_processed_rec.hold_reason_text) || ',' ||
+                        quote_nullable(_queue_id) || ',' || quote_nullable(_processed_rec.queue_priority) || ',' ||
+                        quote_nullable(_processed_rec.processed_time) || ')';
 
-                IF _offset != 0 THEN
-                        SELECT  dblink_get_result.dblink_send_query_result != 'INSERT 0 0'
-                        INTO    _remote_found
-                        FROM    dblink_get_result($$||_name_dblink_conn||$$) AS dblink_get_result(dblink_send_query_result text);
-
-                        -- dblink_get_result must be called once for each query sent, and one additional time to obtain an empty set
-                        -- result.
-                        PERFORM dblink_get_result($$||_name_dblink_conn||$$);
+                IF _remote_sql_len = 0 THEN
+                        _remote_sql_len := octet_length(_remote_sql) + octet_length(_sql_value);
+                ELSE
+                        _remote_sql_len := _remote_sql_len + octet_length(_sql_value) + 2;
+                        _remote_sql := _remote_sql || E',\n';
                 END IF;
+                _remote_sql := _remote_sql || _sql_value;
 
-                EXIT WHEN _remote_sql IS NULL;
+                IF _remote_sql_len >= _remote_sql_len_max THEN
+                        IF _sent_first_remote THEN
+                                SELECT  dblink_get_result.dblink_send_query_result != 'INSERT 0 0'
+                                INTO    _remote_found
+                                FROM    dblink_get_result($$||_name_dblink_conn||$$)
+                                                AS dblink_get_result(dblink_send_query_result text);
 
-                _remote_dispatched  := dblink_send_query($$||_name_dblink_conn||$$, _remote_sql) = 1;
-                _offset             := _offset + _limit;
+                                -- dblink_get_result must be called once for each query sent, and one additional time to obtain an
+                                -- empty set result.
+                                PERFORM dblink_get_result($$||_name_dblink_conn||$$);
+                        END IF;
+
+                        _remote_dispatched      := dblink_send_query($$||_name_dblink_conn||$$, _remote_sql) = 1;
+                        _remote_sql             := $DBL$INSERT INTO $$||_name_remote_queue_bulk||$$(id,hold_reason_id,$DBL$ ||
+                                                        $DBL$hold_reason_text,queue_id,queue_priority,processed_time)VALUES$DBL$||
+                                                        E'\n';
+                        _remote_sql_len         := 0;
+                        _sent_first_remote      := TRUE;
+                END IF;
         END LOOP;
+
+        IF _sent_first_remote THEN
+                SELECT  dblink_get_result.dblink_send_query_result != 'INSERT 0 0'
+                INTO    _remote_found
+                FROM    dblink_get_result($$||_name_dblink_conn||$$)
+                                AS dblink_get_result(dblink_send_query_result text);
+
+                -- dblink_get_result must be called once for each query sent, and one additional time to obtain an
+                -- empty set result.
+                PERFORM dblink_get_result($$||_name_dblink_conn||$$);
+        END IF;
+
+        IF _remote_sql_len != 0 THEN
+                _remote_dispatched := dblink_send_query($$||_name_dblink_conn||$$, _remote_sql) = 1;
+
+                SELECT  dblink_get_result.dblink_send_query_result != 'INSERT 0 0'
+                INTO    _remote_found
+                FROM    dblink_get_result($$||_name_dblink_conn||$$)
+                                AS dblink_get_result(dblink_send_query_result text);
+
+                -- dblink_get_result must be called once for each query sent, and one additional time to obtain an
+                -- empty set result.
+                PERFORM dblink_get_result($$||_name_dblink_conn||$$);
+        END IF;
 
         SELECT  queue_bulk.found
         INTO    _remote_found
@@ -3438,7 +3479,7 @@ BEGIN
         UPDATE  $$||_name_queue_status||$$ AS queue_status
         SET     queue_id = NULL;
 
-        RETURN _offset != 0;
+        RETURN _remote_sql_len != 0 OR _sent_first_remote;
 END
 $DEFINITION$
         LANGUAGE plpgsql VOLATILE
@@ -3447,11 +3488,11 @@ $$;
         EXECUTE _sql_buffer;
 END;
 $_$;
-ALTER FUNCTION sys_syn_dblink.proc_table_code(sys_syn_dblink.proc_tables_def, sys_syn_dblink.table_types_def,
+COMMENT ON FUNCTION sys_syn_dblink.proc_table_code(sys_syn_dblink.proc_tables_def, sys_syn_dblink.table_types_def,
         sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[],
         sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_proc_column[], sys_syn_dblink.create_put_column[],
         text, text, text, hstore, smallint, smallint)
-  OWNER TO postgres;
+  IS '';
 
 CREATE FUNCTION sys_syn_dblink.proc_table_drop (proc_table_id text, drop_put_table boolean default false)
         RETURNS void
@@ -3540,8 +3581,8 @@ BEGIN
 END;
 $_$
         COST 40;
-ALTER FUNCTION sys_syn_dblink.proc_table_drop(text, boolean)
-        OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.proc_table_drop(text, boolean)
+        IS '';
 
 CREATE FUNCTION sys_syn_dblink.proc_table_drop_worker (proc_table_id text, worker_id smallint)
         RETURNS void
@@ -3579,8 +3620,8 @@ BEGIN
 END;
 $_$
         COST 40;
-ALTER FUNCTION sys_syn_dblink.proc_table_drop_worker(text, smallint)
-        OWNER TO postgres;
+COMMENT ON FUNCTION sys_syn_dblink.proc_table_drop_worker(text, smallint)
+        IS '';
 
 
 SELECT pg_catalog.pg_extension_config_dump('sys_syn_dblink.table_types_def', $$WHERE table_type_id NOT LIKE 'sys_syn-%'$$);

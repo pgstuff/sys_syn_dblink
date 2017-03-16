@@ -350,6 +350,70 @@ A boolean is returned.  False indicates that there are no statuses to push.  Tru
 
 ==== Advanced
 
+===== put_table_transforms
+
+When new tables are added, the rules in the `sys_syn_dblink.put_table_transforms` table modifies the table arguments.  The rule is applied when all criteria that is specified in the rule are true.
+
+.Columns
+rule_group_id::
+    NULL for a rule that applies to all tables.
+priority::
+    The order that the rule is applied.
+proc_table_id_like::
+    The rule is applied to the table when the proc_table_id matches this `LIKE` pattern.
+cluster_id_like::
+    The rule is applied to the table when the cluster_id matches this `LIKE` pattern.
+in_table_id_like::
+    The rule is applied to the table when the in_table_id matches this `LIKE` pattern.
+out_group_id_like::
+    The rule is applied to the table when the out_group_id matches this `LIKE` pattern.
+in_group_id_like::
+    The rule is applied to the table when the in_group_id matches this `LIKE` pattern.
+put_group_id_like::
+    The rule is applied to the table when the put_group_id_like matches this `LIKE` pattern.
+proc_schema_like::
+    The rule is applied to the table when the proc_schema matches this `LIKE` pattern.
+put_schema_like::
+    The rule is applied to the table when the put_schema matches this `LIKE` pattern.
+put_table_name_like::
+    The rule is applied to the table when the put_table_name matches this `LIKE` pattern.
+table_type_id_like::
+    The rule is applied to the table when the table_type_id matches this `LIKE` pattern.
+attributes_array::
+    The rule is applied to the table when the attributes_array is this value.
+dblink_connname_like::
+    The rule is applied to the table when the dblink_connname matches this `LIKE` pattern.
+remote_schema_like::
+    The rule is applied to the table when the remote_schema matches this `LIKE` pattern.
+new_proc_schema::
+    Change the tables's proc_schema to this.
+new_put_schema::
+    Change the tables's put_schema to this.
+new_put_table_name::
+    Change the tables's put_table_name to this.
+new_table_type_id::
+    Change the tables's table_type_id to this.
+table_settings::
+    Concatenate these settings.
+new_dblink_connname::
+    Change the tables's dblink_connname to this.
+new_records_per_proc::
+    Change the tables's records_per_proc to this.
+new_remote_sql_len_max::
+    Change the tables's remote_sql_len_max to this.
+add_columns::
+    Add the specified columns.
+omit::
+    Omit this table.
+final_ids::
+    Stop processing rules with any of these IDs.
+final_rule::
+    Stop processing all rules after this one.
+comments::
+    If you want to add comments about this rule in this table, add them in this column.
+
+
+
 ===== put_column_transforms
 
 When new tables are added, the rules in the `sys_syn_dblink.put_column_transforms` table adds, modifies, or removes columns.  The rule is applied when all criteria that is specified in the rule are true.
