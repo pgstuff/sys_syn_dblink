@@ -324,13 +324,31 @@ INSERT INTO sys_syn_dblink.table_types_def (
         table_create_proc_schema,       table_create_proc_name,         table_drop_proc_schema, table_drop_proc_name,
         put_sql_proc_schema,                    put_sql_proc_name,
         initial_table_settings)
-VALUES ('sys_syn-direct',                       false,
+VALUES  (
+        'sys_syn-bitemporal',                   true,
+        'sys_syn_dblink',               'table_create_sql_bitemporal',  'sys_syn_dblink',       'table_drop_sql_bitemporal',
+        'sys_syn_dblink',                       'put_sql_bitemporal_array',
+        $$
+                sys_syn.bitemporal.active_table_name    => %1,
+                sys_syn.bitemporal.immutable_table_name => %1_immutable,
+                sys_syn.bitemporal.history_table_name   => %1_history,
+                sys_syn.bitemporal.current_view_name    => %1_current,
+                sys_syn.bitemporal.active_view_name     => %1_active,
+                sys_syn.bitemporal.range_1.column_name          => %1,
+                sys_syn.bitemporal.range_1.lower.column_name    => %1,
+                sys_syn.bitemporal.range_2.column_name          => %1,
+                sys_syn.bitemporal.range_2_active.column_name   => %1
+        $$),('sys_syn-direct',                  false,
         'sys_syn_dblink',               'table_create_sql_direct',      'sys_syn_dblink',       'table_drop_sql_direct',
         'sys_syn_dblink',                       'put_sql_direct',
         ''),(
         'sys_syn-direct',                       true,
         'sys_syn_dblink',               'table_create_sql_direct_array','sys_syn_dblink',       'table_drop_sql_direct_array',
         'sys_syn_dblink',                       'put_sql_direct_array',
+        ''),(
+        'sys_syn-range',                        true,
+        'sys_syn_dblink',               'table_create_sql_range_array', 'sys_syn_dblink',       'table_drop_sql_range_array',
+        'sys_syn_dblink',                       'put_sql_range_array',
         ''),(
         'sys_syn-temporal',                     true,
         'sys_syn_dblink',               'table_create_sql_temporal',    'sys_syn_dblink',       'table_drop_sql_temporal',
@@ -347,20 +365,6 @@ VALUES ('sys_syn-direct',                       false,
                 sys_syn.temporal.active_table_name      => %1,
                 sys_syn.temporal.history_table_name     => %1_history,
                 sys_syn.temporal.range_1.column_name    => %1
-        $$),(
-        'sys_syn-bitemporal',                   true,
-        'sys_syn_dblink',               'table_create_sql_bitemporal',  'sys_syn_dblink',       'table_drop_sql_bitemporal',
-        'sys_syn_dblink',                       'put_sql_bitemporal_array',
-        $$
-                sys_syn.bitemporal.active_table_name    => %1,
-                sys_syn.bitemporal.immutable_table_name => %1_immutable,
-                sys_syn.bitemporal.history_table_name   => %1_history,
-                sys_syn.bitemporal.current_view_name    => %1_current,
-                sys_syn.bitemporal.active_view_name     => %1_active,
-                sys_syn.bitemporal.range_1.column_name          => %1,
-                sys_syn.bitemporal.range_1.lower.column_name    => %1,
-                sys_syn.bitemporal.range_2.column_name          => %1,
-                sys_syn.bitemporal.range_2_active.column_name   => %1
         $$);
 
 
@@ -733,8 +737,8 @@ BEGIN
                 data_type       text NOT NULL,
                 expression      text NOT NULL,
                 exception_traps sys_syn_dblink.exception_trap[] NOT NULL,
-                declared        boolean DEFAULT FALSE NOT NULL
-        ) ON COMMIT DROP;
+                declared        boolean DEFAULT FALSE NOT NULL)
+        ON COMMIT DROP;
 
         CREATE TEMPORARY TABLE primary_columns_temp (
                 primary_in_table_id     text NOT NULL,
@@ -1435,7 +1439,8 @@ BEGIN
         _type_attributes_name   := _proc_table_def.proc_table_id||'_proc_attributes';
         _type_no_diff_name      := _proc_table_def.proc_table_id||'_proc_no_diff';
 
-        CREATE TEMPORARY TABLE out_queue_data_view_columns_temp ON COMMIT DROP AS
+        CREATE TEMPORARY TABLE out_queue_data_view_columns_temp
+        ON COMMIT DROP AS
         SELECT  *
         FROM    dblink(dblink_connname, $$
                         SELECT  column_name,
@@ -1913,7 +1918,7 @@ $BODY$
 DECLARE
         _data_type_range text;
 BEGIN
-        IF data_type = 'integer' THEN
+        IF data_type = 'integer' OR data_type = 'smallint' OR data_type = 'tinyint' THEN
                 RETURN 'int4range';
         ELSIF data_type = 'bigint' THEN
                 RETURN 'int8range';
@@ -1927,530 +1932,15 @@ BEGIN
                 RETURN 'daterange';
         END IF;
 
-        RAISE EXCEPTION 'sys_syn_dblink.range_from_data_type:  Data type does not have a range'
-        USING HINT = 'Use integer, bigint, numeric, timestamp without time zone, timestamp with time zone, or date.  Or add the r'||
-                'ange to sys_syn_dblink.range_from_data_type';
+        RAISE EXCEPTION 'sys_syn_dblink.range_from_data_type:  Data type ''%'' does not have a range', data_type
+        USING HINT = 'Use integer, smallint, tinyint, bigint, numeric, timestamp without time zone, timestamp with time zone, or '||
+                'date.  Or add the range to sys_syn_dblink.range_from_data_type';
 END
 $BODY$
   LANGUAGE plpgsql IMMUTABLE
   COST 30;
 COMMENT ON FUNCTION sys_syn_dblink.range_from_data_type(text)
   IS '';
-
-
--- direct
-
-CREATE FUNCTION sys_syn_dblink.table_create_sql_direct (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        table_settings                  hstore)
-        RETURNS text AS
-$BODY$
-DECLARE
-        _table_name_sql         TEXT;
-        _sql_buffer             TEXT;
-        _columns_id             sys_syn_dblink.create_put_column[];
-        _columns_attribute      sys_syn_dblink.create_put_column[];
-BEGIN
-        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
-        _columns_attribute      := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE);
-
-        _sql_buffer := $$CREATE TABLE $$||_table_name_sql||$$ (
-        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE%,
-        ', '')||sys_syn_dblink.put_columns_format(_columns_attribute, '%COLUMN_NAME% %FORMAT_TYPE%,
-        ', '')||$$PRIMARY KEY ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ', ')||$$)
-);
-$$;
-
-        RETURN _sql_buffer;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_direct(text, text, sys_syn_dblink.create_put_column[], hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct (
-        schema_name                     text,
-        table_name                      text,
-        table_settings                  hstore)
-        RETURNS void AS
-$BODY$
-BEGIN
-        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_direct(text, text, hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.put_sql_direct (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        schema_processed_name           text,
-        type_id_name                    text,
-        type_attributes_name            text,
-        type_no_diff_name               text,
-        table_settings                  hstore)
-        RETURNS sys_syn_dblink.put_code_sql AS
-$BODY$
-DECLARE
-        _table_name_sql         TEXT;
-        _columns_id             sys_syn_dblink.create_put_column[];
-        _columns_attribute      sys_syn_dblink.create_put_column[];
-        _put_code_sql           sys_syn_dblink.put_code_sql;
-        _put_code_attribute_sql sys_syn_dblink.put_code_sql;
-BEGIN
-        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
-        _columns_attribute      := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE);
-
-        _put_code_attribute_sql := sys_syn_dblink.put_sql_expressions(
-                ARRAY['Attribute']::sys_syn_dblink.in_column_type[],
-                ARRAY['Add','Change','Delete']::sys_syn_dblink.delta_type[],
-                2::smallint);
-
-        _put_code_sql.declarations_sql := _put_code_attribute_sql.declarations_sql;
-        _put_code_sql.logic_sql := $$
-        IF delta_type = 'Delete'::sys_syn_dblink.delta_type THEN
-                DELETE FROM $$||_table_name_sql||$$ AS out_table
-                WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-        ELSE$$||_put_code_attribute_sql.logic_sql||$$
-                INSERT INTO $$||_table_name_sql||$$ AS out_table (
-                        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
-                        ')||sys_syn_dblink.put_columns_format(_columns_attribute, ',
-                        %COLUMN_NAME%', '')||$$)
-                VALUES ($$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
-                        ')||sys_syn_dblink.put_columns_format(_columns_attribute, ',
-                        %VALUE_EXPRESSION%', '')||$$)
-                ON CONFLICT ON CONSTRAINT $$||quote_ident(
-                        sys_syn_dblink.table_primary_key_name(schema_name::regnamespace, table_name))||$$ DO UPDATE
-                SET     $$||sys_syn_dblink.put_columns_format(_columns_attribute, '%COLUMN_NAME% = EXCLUDED.%COLUMN_NAME%', ',
-                        ')||$$
-                WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-        END IF;
-$$;
-
-        RETURN _put_code_sql;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.put_sql_direct(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
-  IS '';
-
---- direct_array
-
-CREATE FUNCTION sys_syn_dblink.table_create_sql_direct_array (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        table_settings                  hstore)
-        RETURNS text AS
-$BODY$
-DECLARE
-        _table_name_sql         TEXT;
-        _columns_id             sys_syn_dblink.create_put_column[];
-        _columns_attribute      sys_syn_dblink.create_put_column[];
-        _sql_buffer             TEXT;
-BEGIN
-        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns, TRUE);
-
-        _sql_buffer := $$CREATE TABLE $$||_table_name_sql||$$ (
-        $$||sys_syn_dblink.put_columns_format(put_columns, '%COLUMN_NAME% %FORMAT_TYPE%,
-        ', '')||$$PRIMARY KEY ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ', ')||$$)
-);
-$$;
-
-        RETURN _sql_buffer;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct_array (
-        schema_name                     text,
-        table_name                      text,
-        table_settings                  hstore)
-        RETURNS void AS
-$BODY$
-BEGIN
-        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_direct_array(text, text, hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.put_sql_direct_array (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        schema_processed_name           text,
-        type_id_name                    text,
-        type_attributes_name            text,
-        type_no_diff_name               text,
-        table_settings                  hstore)
-        RETURNS sys_syn_dblink.put_code_sql AS
-$BODY$
-DECLARE
-        _table_name_sql         TEXT;
-        _columns_id             sys_syn_dblink.create_put_column[];
-        _columns_attribute      sys_syn_dblink.create_put_column[];
-        _put_code_sql           sys_syn_dblink.put_code_sql;
-BEGIN
-        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
-        _columns_attribute      := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE);
-
-        _put_code_sql.declarations_sql := '';
-        _put_code_sql.logic_sql := $$
-        DELETE FROM $$||_table_name_sql||$$ AS out_table
-        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-
-        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
-                INSERT INTO $$||_table_name_sql||$$ AS out_table (
-                        $$||sys_syn_dblink.put_columns_format(put_columns, '%COLUMN_NAME%', ',
-                        ')||$$)
-                SELECT  $$||sys_syn_dblink.put_columns_format(put_columns, '%VALUE_EXPRESSION%', ',
-                        ')||$$
-                FROM    unnest(attributes) AS attribute_rows;
-        END IF;$$;
-
-        RETURN _put_code_sql;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.put_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
-        hstore) IS '';
-
---- temporal
-
-CREATE FUNCTION sys_syn_dblink.table_create_sql_temporal (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        table_settings                  hstore)
-        RETURNS text AS
-$BODY$
-DECLARE
-        _table_name                     TEXT;
-        _table_name_sql                 TEXT;
-        _table_name_history             TEXT;
-        _table_name_history_sql         TEXT;
-        _columns_id                     sys_syn_dblink.create_put_column[];
-        _columns_orderby                sys_syn_dblink.create_put_column[];
-        _columns_unordered              sys_syn_dblink.create_put_column[];
-        _column_name_sys_range          TEXT;
-        _column_name_sys_range_sql      TEXT;
-        _sql_buffer                     TEXT;
-BEGIN
-        _table_name             := REPLACE(
-                table_settings -> 'sys_syn.temporal.active_table_name',
-                '%1',
-                table_name);
-        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
-        _table_name_history             := REPLACE(
-                table_settings -> 'sys_syn.temporal.history_table_name',
-                '%1',
-                table_name);
-        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
-        _columns_orderby        := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
-        _columns_unordered      := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
-
-        IF array_length(_columns_orderby, 1) != 1 THEN
-                RAISE EXCEPTION
-                        'sys_syn_dblink.table_create_sql_temporal:  attribute columns with an array_order does not total to 1.'
-                USING HINT = 'A temporal table must have exactly 1 array_order.';
-        END IF;
-
-        IF _columns_orderby[1].array_order != 1::smallint THEN
-                RAISE EXCEPTION 'sys_syn_dblink.table_create_sql_temporal:  array_order must be 1.'
-                USING HINT = 'Set the array_order to 1.';
-        END IF;
-
-        _column_name_sys_range          := _columns_orderby[1].column_name;
-        _column_name_sys_range          := REPLACE(
-                table_settings -> 'sys_syn.temporal.range_1.column_name',
-                '%1',
-                _column_name_sys_range);
-        _column_name_sys_range_sql      := quote_ident(_column_name_sys_range);
-
-        _sql_buffer := $$CREATE TABLE $$||_table_name_history_sql||$$ (
-        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE% NOT NULL,
-        ', '')||_column_name_sys_range_sql||$$ tstzrange NOT NULL,
-        $$||sys_syn_dblink.put_columns_format(_columns_unordered, '%COLUMN_NAME% %FORMAT_TYPE%,
-        ', '')||$$CONSTRAINT $$||quote_ident(_table_name_history||'_overlap')||$$ EXCLUDE USING GIST (
-                $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% WITH =', ',
-                ')||$$,
-                $$||_column_name_sys_range_sql||$$ WITH &&
-        )
-);
-
-CREATE TABLE $$||_table_name_sql||$$ () INHERITS ($$||_table_name_history_sql||$$);
-
-ALTER TABLE $$||_table_name_sql||$$
-        ALTER COLUMN $$||_column_name_sys_range_sql||$$ SET DEFAULT tstzrange(current_timestamp, null);
-
-ALTER TABLE $$||_table_name_sql||$$
-        ADD PRIMARY KEY ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ', ')||$$);
-
-CREATE TRIGGER versioning_trigger
-BEFORE INSERT OR UPDATE OR DELETE ON $$||_table_name_sql||$$
-FOR EACH ROW EXECUTE PROCEDURE versioning(
-        $$||quote_literal(_column_name_sys_range)||$$, $$||quote_literal(_table_name_history_sql)||$$, true
-);
-$$;
-
-        RETURN _sql_buffer;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_temporal(text, text, sys_syn_dblink.create_put_column[], hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.table_drop_sql_temporal (
-        schema_name                     text,
-        table_name                      text,
-        table_settings                  hstore)
-        RETURNS void AS
-$BODY$
-DECLARE
-        _table_name                     TEXT;
-        _table_name_sql                 TEXT;
-        _table_name_history             TEXT;
-        _table_name_history_sql         TEXT;
-BEGIN
-        _table_name             := REPLACE(
-                table_settings -> 'sys_syn.temporal.active_table_name',
-                '%1',
-                table_name);
-        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
-        _table_name_history             := REPLACE(
-                table_settings -> 'sys_syn.temporal.history_table_name',
-                '%1',
-                table_name);
-        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
-
-        EXECUTE 'DROP TABLE ' || _table_name_sql;
-        EXECUTE 'DROP TABLE ' || _table_name_history_sql;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_temporal(text, text, hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.put_sql_temporal (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        schema_processed_name           text,
-        type_id_name                    text,
-        type_attributes_name            text,
-        type_no_diff_name               text,
-        table_settings                  hstore)
-        RETURNS sys_syn_dblink.put_code_sql AS
-$BODY$
-DECLARE
-        _table_name                     TEXT;
-        _table_name_sql                 TEXT;
-        _table_name_history             TEXT;
-        _table_name_history_sql         TEXT;
-        _columns_id                     sys_syn_dblink.create_put_column[];
-        _columns_orderby                sys_syn_dblink.create_put_column[];
-        _columns_unordered              sys_syn_dblink.create_put_column[];
-        _column_name_sys_range          TEXT;
-        _column_name_sys_range_sql      TEXT;
-        _put_code_sql                   sys_syn_dblink.put_code_sql;
-        _array_index                    INTEGER;
-BEGIN
-        _table_name             := REPLACE(
-                table_settings -> 'sys_syn.temporal.active_table_name',
-                '%1',
-                table_name);
-        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
-        _table_name_history             := REPLACE(
-                table_settings -> 'sys_syn.temporal.history_table_name',
-                '%1',
-                table_name);
-        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
-        _columns_orderby        := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
-        _columns_unordered      := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
-
-        _column_name_sys_range          := _columns_orderby[1].column_name;
-        _column_name_sys_range          := REPLACE(
-                table_settings -> 'sys_syn.temporal.range_1.column_name',
-                '%1',
-                _column_name_sys_range);
-        _column_name_sys_range_sql      := quote_ident(_column_name_sys_range);
-
-        _put_code_sql.declarations_sql := '';
-        _put_code_sql.logic_sql := $$
-        DELETE FROM $$||_table_name_sql||$$ AS out_table
-        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-
-        DELETE FROM $$||_table_name_history_sql||$$ AS out_table
-        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-
-        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
-                PERFORM set_system_time($$||_columns_orderby[1].value_expression||$$);
-
-                INSERT INTO $$||_table_name_sql||$$ AS out_table (
-                        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
-                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
-                        %COLUMN_NAME%', '')||$$)
-                SELECT  $$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
-                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
-                        %VALUE_EXPRESSION%', '')||$$;
-
-                PERFORM set_system_time(NULL);
-        END IF;$$;
-
-        RETURN _put_code_sql;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.put_sql_temporal(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
-  IS '';
-
-CREATE FUNCTION sys_syn_dblink.put_sql_temporal_array (
-        schema_name                     text,
-        table_name                      text,
-        put_columns                     sys_syn_dblink.create_put_column[],
-        schema_processed_name           text,
-        type_id_name                    text,
-        type_attributes_name            text,
-        type_no_diff_name               text,
-        table_settings                  hstore)
-        RETURNS sys_syn_dblink.put_code_sql AS
-$BODY$
-DECLARE
-        _table_name                     TEXT;
-        _table_name_sql                 TEXT;
-        _table_name_history             TEXT;
-        _table_name_history_sql         TEXT;
-        _columns_id                     sys_syn_dblink.create_put_column[];
-        _columns_orderby                sys_syn_dblink.create_put_column[];
-        _columns_unordered              sys_syn_dblink.create_put_column[];
-        _column_name_sys_range          TEXT;
-        _column_name_sys_range_sql      TEXT;
-        _put_code_sql                   sys_syn_dblink.put_code_sql;
-        _array_index                    INTEGER;
-BEGIN
-        _table_name             := REPLACE(
-                table_settings -> 'sys_syn.temporal.active_table_name',
-                '%1',
-                table_name);
-        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
-        _table_name_history             := REPLACE(
-                table_settings -> 'sys_syn.temporal.history_table_name',
-                '%1',
-                table_name);
-        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
-        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
-        _columns_orderby        := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
-        _columns_unordered      := sys_syn_dblink.put_columns_query(
-                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
-
-        _column_name_sys_range          := _columns_orderby[1].column_name;
-        _column_name_sys_range          := REPLACE(
-                table_settings -> 'sys_syn.temporal.range_1.column_name',
-                '%1',
-                _column_name_sys_range);
-        _column_name_sys_range_sql      := quote_ident(_column_name_sys_range);
-
-        _put_code_sql.declarations_sql := $$
-        attribute_rows $$||quote_ident(schema_processed_name)||'.'||quote_ident(type_attributes_name)||$$;
-        _system_time            timestamp with time zone;
-        _system_time_future     timestamp with time zone;$$;
-        _put_code_sql.logic_sql := $$
-        DELETE FROM $$||_table_name_sql||$$ AS out_table
-        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-
-        DELETE FROM $$||_table_name_history_sql||$$ AS out_table
-        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
-        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
-                ')||$$;
-
-        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
-                attribute_rows := attributes[array_length(attributes, 1)];
-                _system_time := $$||_columns_orderby[1].value_expression||$$;
-
-                PERFORM set_system_time(_system_time);
-
-                INSERT INTO $$||_table_name_sql||$$ AS out_table (
-                        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
-                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
-                        %COLUMN_NAME%', '')||$$)
-                SELECT  $$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
-                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
-                        %VALUE_EXPRESSION%', '')||$$;
-
-                FOR _array_index IN REVERSE array_length(attributes, 1) - 1 .. 1 LOOP
-                        _system_time_future     := _system_time;
-                        attribute_rows          := attributes[_array_index];
-                        _system_time            := $$||_columns_orderby[1].value_expression||$$;
-
-                        IF _system_time >= _system_time_future THEN
-                                RAISE EXCEPTION 'The system time value is not equal to the next record.'
-                                USING HINT = 'Fix the data so that every record has a unique system time value.';
-                        END IF;
-
-                        INSERT INTO $$||_table_name_history_sql||$$ AS out_table (
-                                $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%,
-                                ', '')||_column_name_sys_range_sql||
-                                sys_syn_dblink.put_columns_format(_columns_unordered, ',
-                                %COLUMN_NAME%', '')||$$)
-                        SELECT  $$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%,
-                                ', '')||$$tstzrange(_system_time, _system_time_future)$$||
-                                sys_syn_dblink.put_columns_format(_columns_unordered, ',
-                                %VALUE_EXPRESSION%', '')||$$;
-                END LOOP;
-
-                PERFORM set_system_time(NULL);
-        END IF;$$;
-
-        RETURN _put_code_sql;
-END
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-COMMENT ON FUNCTION sys_syn_dblink.put_sql_temporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
-        hstore) IS '';
 
 -- bitemporal
 
@@ -2981,6 +2471,752 @@ $BODY$
 COMMENT ON FUNCTION sys_syn_dblink.put_sql_bitemporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
         hstore)
   IS '';
+
+-- direct
+
+CREATE FUNCTION sys_syn_dblink.table_create_sql_direct (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        table_settings                  hstore)
+        RETURNS text AS
+$BODY$
+DECLARE
+        _table_name_sql         TEXT;
+        _sql_buffer             TEXT;
+        _columns_id             sys_syn_dblink.create_put_column[];
+        _columns_attribute      sys_syn_dblink.create_put_column[];
+BEGIN
+        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_attribute      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE);
+
+        _sql_buffer := $$CREATE TABLE $$||_table_name_sql||$$ (
+        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE% NOT NULL,
+        ', '')||sys_syn_dblink.put_columns_format(_columns_attribute, '%COLUMN_NAME% %FORMAT_TYPE%,
+        ', '')||$$PRIMARY KEY ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ', ')||$$)
+);
+$$;
+
+        RETURN _sql_buffer;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_direct(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+BEGIN
+        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_direct(text, text, hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.put_sql_direct (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        schema_processed_name           text,
+        type_id_name                    text,
+        type_attributes_name            text,
+        type_no_diff_name               text,
+        table_settings                  hstore)
+        RETURNS sys_syn_dblink.put_code_sql AS
+$BODY$
+DECLARE
+        _table_name_sql         TEXT;
+        _columns_id             sys_syn_dblink.create_put_column[];
+        _columns_attribute      sys_syn_dblink.create_put_column[];
+        _put_code_sql           sys_syn_dblink.put_code_sql;
+        _put_code_attribute_sql sys_syn_dblink.put_code_sql;
+BEGIN
+        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_attribute      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE);
+
+        _put_code_attribute_sql := sys_syn_dblink.put_sql_expressions(
+                ARRAY['Attribute']::sys_syn_dblink.in_column_type[],
+                ARRAY['Add','Change','Delete']::sys_syn_dblink.delta_type[],
+                2::smallint);
+
+        _put_code_sql.declarations_sql := _put_code_attribute_sql.declarations_sql;
+        _put_code_sql.logic_sql := $$
+        IF delta_type = 'Delete'::sys_syn_dblink.delta_type THEN
+                DELETE FROM $$||_table_name_sql||$$ AS out_table
+                WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+        ELSE$$||_put_code_attribute_sql.logic_sql||$$
+                INSERT INTO $$||_table_name_sql||$$ AS out_table (
+                        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
+                        ')||sys_syn_dblink.put_columns_format(_columns_attribute, ',
+                        %COLUMN_NAME%', '')||$$)
+                VALUES ($$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
+                        ')||sys_syn_dblink.put_columns_format(_columns_attribute, ',
+                        %VALUE_EXPRESSION%', '')||$$)
+                ON CONFLICT ON CONSTRAINT $$||quote_ident(
+                        sys_syn_dblink.table_primary_key_name(schema_name::regnamespace, table_name))||$$ DO UPDATE
+                SET     $$||sys_syn_dblink.put_columns_format(_columns_attribute, '%COLUMN_NAME% = EXCLUDED.%COLUMN_NAME%', ',
+                        ')||$$
+                WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+        END IF;
+$$;
+
+        RETURN _put_code_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_direct(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
+  IS '';
+
+--- direct_array
+
+CREATE FUNCTION sys_syn_dblink.table_create_sql_direct_array (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        table_settings                  hstore)
+        RETURNS text AS
+$BODY$
+DECLARE
+        _table_name_sql         TEXT;
+        _columns_id             sys_syn_dblink.create_put_column[];
+        _columns_attribute      sys_syn_dblink.create_put_column[];
+        _sql_buffer             TEXT;
+BEGIN
+        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns, TRUE);
+        _columns_attribute      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
+
+        _sql_buffer := $$CREATE TABLE $$||_table_name_sql||$$ (
+        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE% NOT NULL,
+        ', '')||sys_syn_dblink.put_columns_format(_columns_attribute, '%COLUMN_NAME% %FORMAT_TYPE%,
+        ', '')||$$PRIMARY KEY ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ', ')||$$)
+);
+$$;
+
+        RETURN _sql_buffer;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_direct_array (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+BEGIN
+        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_direct_array(text, text, hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.put_sql_direct_array (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        schema_processed_name           text,
+        type_id_name                    text,
+        type_attributes_name            text,
+        type_no_diff_name               text,
+        table_settings                  hstore)
+        RETURNS sys_syn_dblink.put_code_sql AS
+$BODY$
+DECLARE
+        _table_name_sql         TEXT;
+        _columns_id             sys_syn_dblink.create_put_column[];
+        _columns_attribute      sys_syn_dblink.create_put_column[];
+        _put_code_sql           sys_syn_dblink.put_code_sql;
+BEGIN
+        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_attribute      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE);
+
+        _put_code_sql.declarations_sql := '';
+        _put_code_sql.logic_sql := $$
+        DELETE FROM $$||_table_name_sql||$$ AS out_table
+        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+
+        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
+                INSERT INTO $$||_table_name_sql||$$ AS out_table (
+                        $$||sys_syn_dblink.put_columns_format(put_columns, '%COLUMN_NAME%', ',
+                        ')||$$)
+                SELECT  $$||sys_syn_dblink.put_columns_format(put_columns, '%VALUE_EXPRESSION%', ',
+                        ')||$$
+                FROM    unnest(attributes) AS attribute_rows;
+        END IF;$$;
+
+        RETURN _put_code_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_direct_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+        hstore) IS '';
+
+--- temporal
+
+CREATE FUNCTION sys_syn_dblink.table_create_sql_temporal (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        table_settings                  hstore)
+        RETURNS text AS
+$BODY$
+DECLARE
+        _table_name                     TEXT;
+        _table_name_sql                 TEXT;
+        _table_name_history             TEXT;
+        _table_name_history_sql         TEXT;
+        _columns_id                     sys_syn_dblink.create_put_column[];
+        _columns_orderby                sys_syn_dblink.create_put_column[];
+        _columns_unordered              sys_syn_dblink.create_put_column[];
+        _column_name_sys_range          TEXT;
+        _column_name_sys_range_sql      TEXT;
+        _sql_buffer                     TEXT;
+BEGIN
+        _table_name             := REPLACE(
+                table_settings -> 'sys_syn.temporal.active_table_name',
+                '%1',
+                table_name);
+        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
+        _table_name_history             := REPLACE(
+                table_settings -> 'sys_syn.temporal.history_table_name',
+                '%1',
+                table_name);
+        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_orderby        := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
+        _columns_unordered      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
+
+        IF array_length(_columns_orderby, 1) != 1 THEN
+                RAISE EXCEPTION
+                        'sys_syn_dblink.table_create_sql_temporal:  attribute columns with an array_order does not total to 1.'
+                USING HINT = 'A temporal table must have exactly 1 array_order.';
+        END IF;
+
+        IF _columns_orderby[1].array_order != 1::smallint THEN
+                RAISE EXCEPTION 'sys_syn_dblink.table_create_sql_temporal:  array_order must be 1.'
+                USING HINT = 'Set the array_order to 1.';
+        END IF;
+
+        _column_name_sys_range          := _columns_orderby[1].column_name;
+        _column_name_sys_range          := REPLACE(
+                table_settings -> 'sys_syn.temporal.range_1.column_name',
+                '%1',
+                _column_name_sys_range);
+        _column_name_sys_range_sql      := quote_ident(_column_name_sys_range);
+
+        _sql_buffer := $$CREATE TABLE $$||_table_name_history_sql||$$ (
+        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE% NOT NULL,
+        ', '')||_column_name_sys_range_sql||$$ tstzrange NOT NULL,
+        $$||sys_syn_dblink.put_columns_format(_columns_unordered, '%COLUMN_NAME% %FORMAT_TYPE%,
+        ', '')||$$CONSTRAINT $$||quote_ident(_table_name_history||'_overlap')||$$ EXCLUDE USING GIST (
+                $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% WITH =', ',
+                ')||$$,
+                $$||_column_name_sys_range_sql||$$ WITH &&
+        )
+);
+
+CREATE TABLE $$||_table_name_sql||$$ () INHERITS ($$||_table_name_history_sql||$$);
+
+ALTER TABLE $$||_table_name_sql||$$
+        ALTER COLUMN $$||_column_name_sys_range_sql||$$ SET DEFAULT tstzrange(current_timestamp, null);
+
+ALTER TABLE $$||_table_name_sql||$$
+        ADD PRIMARY KEY ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ', ')||$$);
+
+CREATE TRIGGER versioning_trigger
+BEFORE INSERT OR UPDATE OR DELETE ON $$||_table_name_sql||$$
+FOR EACH ROW EXECUTE PROCEDURE versioning(
+        $$||quote_literal(_column_name_sys_range)||$$, $$||quote_literal(_table_name_history_sql)||$$, true
+);
+$$;
+
+        RETURN _sql_buffer;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_temporal(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_temporal (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+DECLARE
+        _table_name                     TEXT;
+        _table_name_sql                 TEXT;
+        _table_name_history             TEXT;
+        _table_name_history_sql         TEXT;
+BEGIN
+        _table_name             := REPLACE(
+                table_settings -> 'sys_syn.temporal.active_table_name',
+                '%1',
+                table_name);
+        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
+        _table_name_history             := REPLACE(
+                table_settings -> 'sys_syn.temporal.history_table_name',
+                '%1',
+                table_name);
+        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
+
+        EXECUTE 'DROP TABLE ' || _table_name_sql;
+        EXECUTE 'DROP TABLE ' || _table_name_history_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_temporal(text, text, hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.put_sql_temporal (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        schema_processed_name           text,
+        type_id_name                    text,
+        type_attributes_name            text,
+        type_no_diff_name               text,
+        table_settings                  hstore)
+        RETURNS sys_syn_dblink.put_code_sql AS
+$BODY$
+DECLARE
+        _table_name                     TEXT;
+        _table_name_sql                 TEXT;
+        _table_name_history             TEXT;
+        _table_name_history_sql         TEXT;
+        _columns_id                     sys_syn_dblink.create_put_column[];
+        _columns_orderby                sys_syn_dblink.create_put_column[];
+        _columns_unordered              sys_syn_dblink.create_put_column[];
+        _column_name_sys_range          TEXT;
+        _column_name_sys_range_sql      TEXT;
+        _put_code_sql                   sys_syn_dblink.put_code_sql;
+        _array_index                    INTEGER;
+BEGIN
+        _table_name             := REPLACE(
+                table_settings -> 'sys_syn.temporal.active_table_name',
+                '%1',
+                table_name);
+        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
+        _table_name_history             := REPLACE(
+                table_settings -> 'sys_syn.temporal.history_table_name',
+                '%1',
+                table_name);
+        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_orderby        := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
+        _columns_unordered      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
+
+        _column_name_sys_range          := _columns_orderby[1].column_name;
+        _column_name_sys_range          := REPLACE(
+                table_settings -> 'sys_syn.temporal.range_1.column_name',
+                '%1',
+                _column_name_sys_range);
+        _column_name_sys_range_sql      := quote_ident(_column_name_sys_range);
+
+        _put_code_sql.declarations_sql := '';
+        _put_code_sql.logic_sql := $$
+        DELETE FROM $$||_table_name_sql||$$ AS out_table
+        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+
+        DELETE FROM $$||_table_name_history_sql||$$ AS out_table
+        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+
+        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
+                PERFORM set_system_time($$||_columns_orderby[1].value_expression||$$);
+
+                INSERT INTO $$||_table_name_sql||$$ AS out_table (
+                        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
+                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                        %COLUMN_NAME%', '')||$$)
+                SELECT  $$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
+                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                        %VALUE_EXPRESSION%', '')||$$;
+
+                PERFORM set_system_time(NULL);
+        END IF;$$;
+
+        RETURN _put_code_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_temporal(text, text, sys_syn_dblink.create_put_column[], text, text, text, text, hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.put_sql_temporal_array (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        schema_processed_name           text,
+        type_id_name                    text,
+        type_attributes_name            text,
+        type_no_diff_name               text,
+        table_settings                  hstore)
+        RETURNS sys_syn_dblink.put_code_sql AS
+$BODY$
+DECLARE
+        _table_name                     TEXT;
+        _table_name_sql                 TEXT;
+        _table_name_history             TEXT;
+        _table_name_history_sql         TEXT;
+        _columns_id                     sys_syn_dblink.create_put_column[];
+        _columns_orderby                sys_syn_dblink.create_put_column[];
+        _columns_unordered              sys_syn_dblink.create_put_column[];
+        _column_name_sys_range          TEXT;
+        _column_name_sys_range_sql      TEXT;
+        _put_code_sql                   sys_syn_dblink.put_code_sql;
+        _array_index                    INTEGER;
+BEGIN
+        _table_name             := REPLACE(
+                table_settings -> 'sys_syn.temporal.active_table_name',
+                '%1',
+                table_name);
+        _table_name_sql         := schema_name::text || '.' || quote_ident(_table_name);
+        _table_name_history             := REPLACE(
+                table_settings -> 'sys_syn.temporal.history_table_name',
+                '%1',
+                table_name);
+        _table_name_history_sql := schema_name::text || '.' || quote_ident(_table_name_history);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_orderby        := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
+        _columns_unordered      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
+
+        _column_name_sys_range          := _columns_orderby[1].column_name;
+        _column_name_sys_range          := REPLACE(
+                table_settings -> 'sys_syn.temporal.range_1.column_name',
+                '%1',
+                _column_name_sys_range);
+        _column_name_sys_range_sql      := quote_ident(_column_name_sys_range);
+
+        _put_code_sql.declarations_sql := $$
+        attribute_rows $$||quote_ident(schema_processed_name)||'.'||quote_ident(type_attributes_name)||$$;
+        _system_time            timestamp with time zone;
+        _system_time_future     timestamp with time zone;$$;
+        _put_code_sql.logic_sql := $$
+        DELETE FROM $$||_table_name_sql||$$ AS out_table
+        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+
+        DELETE FROM $$||_table_name_history_sql||$$ AS out_table
+        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+
+        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
+                attribute_rows := attributes[array_length(attributes, 1)];
+                _system_time := $$||_columns_orderby[1].value_expression||$$;
+
+                PERFORM set_system_time(_system_time);
+
+                INSERT INTO $$||_table_name_sql||$$ AS out_table (
+                        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
+                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                        %COLUMN_NAME%', '')||$$)
+                SELECT  $$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
+                        ')||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                        %VALUE_EXPRESSION%', '')||$$;
+
+                FOR _array_index IN REVERSE array_length(attributes, 1) - 1 .. 1 LOOP
+                        _system_time_future     := _system_time;
+                        attribute_rows          := attributes[_array_index];
+                        _system_time            := $$||_columns_orderby[1].value_expression||$$;
+
+                        IF _system_time >= _system_time_future THEN
+                                RAISE EXCEPTION 'The system time value is not equal to the next record.'
+                                USING HINT = 'Fix the data so that every record has a unique system time value.';
+                        END IF;
+
+                        INSERT INTO $$||_table_name_history_sql||$$ AS out_table (
+                                $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%,
+                                ', '')||_column_name_sys_range_sql||
+                                sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                                %COLUMN_NAME%', '')||$$)
+                        SELECT  $$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%,
+                                ', '')||$$tstzrange(_system_time, _system_time_future)$$||
+                                sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                                %VALUE_EXPRESSION%', '')||$$;
+                END LOOP;
+
+                PERFORM set_system_time(NULL);
+        END IF;$$;
+
+        RETURN _put_code_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_temporal_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+        hstore) IS '';
+
+--- range_array
+
+CREATE FUNCTION sys_syn_dblink.table_create_sql_range_array (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        table_settings                  hstore)
+        RETURNS text AS
+$BODY$
+DECLARE
+        _table_name_sql         TEXT;
+        _columns_id             sys_syn_dblink.create_put_column[];
+        _columns_orderby        sys_syn_dblink.create_put_column[];
+        _columns_unordered      sys_syn_dblink.create_put_column[];
+        _range_count            smallint;
+        _range_index            smallint;
+        _range_put_column_lower sys_syn_dblink.create_put_column;
+        _range_type             TEXT;
+        _columns_orderby_sql    TEXT := '';
+        _columns_constraint_sql TEXT := '';
+        _sql_buffer             TEXT;
+BEGIN
+        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_orderby        := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
+        _columns_unordered      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
+
+        _range_count := (
+                        SELECT  MAX(array_order)
+                        FROM    unnest(_columns_orderby)
+                );
+        IF (_range_count % 2) != 0 THEN
+                RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  The max array_order must be an even number.';
+        END IF;
+        _range_count := _range_count / 2;
+
+        FOR _range_index IN 0 .. _range_count - 1 LOOP
+                _range_put_column_lower := NULL;
+                FOR _put_column_index IN 1 .. array_length(_columns_orderby, 1) LOOP
+                        IF _columns_orderby[_put_column_index].array_order = _range_index * 2 + 1 THEN
+                                _range_put_column_lower = _columns_orderby[_put_column_index];
+                        END IF;
+                END LOOP;
+                IF _range_put_column_lower IS NULL THEN
+                        RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  Cannot find lower range %, array_order %',
+                                _range_index + 1, _range_index * 2 + 1;
+                END IF;
+
+                _range_type := sys_syn_dblink.range_from_data_type(_range_put_column_lower.data_type);
+
+                _columns_orderby_sql := _columns_orderby_sql || $$,
+        $$ || _range_put_column_lower.column_name || $$ $$ || _range_type || $$ NOT NULL$$;
+
+                _columns_constraint_sql := _columns_constraint_sql || $$, $$ || _range_put_column_lower.column_name || $$ WITH &&$$;
+        END LOOP;
+
+        _sql_buffer := $$CREATE TABLE $$||_table_name_sql||$$ (
+        $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE% NOT NULL', ',
+        ')||_columns_orderby_sql||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+        %COLUMN_NAME% %FORMAT_TYPE%', '')||$$,
+        CONSTRAINT test_table_range_overlap EXCLUDE
+        USING gist ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% WITH =', ', ')||_columns_constraint_sql||$$)
+);
+$$;
+
+        RETURN _sql_buffer;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_create_sql_range_array(text, text, sys_syn_dblink.create_put_column[], hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.table_drop_sql_range_array (
+        schema_name                     text,
+        table_name                      text,
+        table_settings                  hstore)
+        RETURNS void AS
+$BODY$
+BEGIN
+        EXECUTE 'DROP TABLE ' || schema_name::text || '.' || quote_ident(table_name);
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.table_drop_sql_range_array(text, text, hstore)
+  IS '';
+
+CREATE FUNCTION sys_syn_dblink.put_sql_range_array (
+        schema_name                     text,
+        table_name                      text,
+        put_columns                     sys_syn_dblink.create_put_column[],
+        schema_processed_name           text,
+        type_id_name                    text,
+        type_attributes_name            text,
+        type_no_diff_name               text,
+        table_settings                  hstore)
+        RETURNS sys_syn_dblink.put_code_sql AS
+$BODY$
+DECLARE
+        _table_name_sql         TEXT;
+        _columns_id             sys_syn_dblink.create_put_column[];
+        _columns_orderby        sys_syn_dblink.create_put_column[];
+        _columns_unordered      sys_syn_dblink.create_put_column[];
+        _put_code_sql           sys_syn_dblink.put_code_sql;
+        _range_count            smallint;
+        _range_index            smallint;
+        _put_column_index       smallint;
+        _range_index_inner      smallint;
+        _range_put_column_lower sys_syn_dblink.create_put_column;
+        _range_put_column_upper sys_syn_dblink.create_put_column;
+        _range_type             TEXT;
+        _range_id               TEXT;
+        _range_set_lowers_sql   TEXT := '';
+        _range_set_change_sql   TEXT := '';
+        _range_columns_sql      TEXT := '';
+        _range_values_sql       TEXT := '';
+        _range_set_next_sql     TEXT := '';
+BEGIN
+        _table_name_sql         := schema_name::text || '.' || quote_ident(table_name);
+        _columns_id             := sys_syn_dblink.put_columns_query_unique_index(put_columns);
+        _columns_orderby        := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, TRUE);
+        _columns_unordered      := sys_syn_dblink.put_columns_query(
+                                        put_columns, ARRAY['Id']::sys_syn_dblink.in_column_type[], TRUE, FALSE);
+
+        _range_count := (
+                        SELECT  MAX(array_order)
+                        FROM    unnest(_columns_orderby)
+                );
+        IF (_range_count % 2) != 0 THEN
+                RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  The max array_order must be an even number.';
+        END IF;
+        _range_count := _range_count / 2;
+
+        _put_code_sql.declarations_sql := $$
+        attribute_rows                  $$||quote_ident(schema_processed_name)||'.'||quote_ident(type_attributes_name)||$$;$$;
+
+        FOR _range_index IN 0 .. _range_count - 1 LOOP
+                _range_put_column_lower := NULL;
+                _range_put_column_upper := NULL;
+                FOR _put_column_index IN 1 .. array_length(_columns_orderby, 1) LOOP
+                        IF _columns_orderby[_put_column_index].array_order = _range_index * 2 + 1 THEN
+                                _range_put_column_lower = _columns_orderby[_put_column_index];
+                        ELSIF _columns_orderby[_put_column_index].array_order = _range_index * 2 + 2 THEN
+                                _range_put_column_upper = _columns_orderby[_put_column_index];
+                        END IF;
+                END LOOP;
+                IF _range_put_column_lower IS NULL THEN
+                        RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  Cannot find lower range %, array_order %',
+                                _range_index + 1, _range_index * 2 + 1;
+                ELSIF _range_put_column_upper IS NULL THEN
+                        RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  Cannot find upper range %, array_order %',
+                                _range_index + 1, _range_index * 2 + 2;
+                ELSIF _range_put_column_lower.data_type != _range_put_column_upper.data_type THEN
+                        RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  In range %, array_order % data type ''%'' does not ma'
+                                'tch array_order % data type ''%''.', _range_index + 1, _range_index * 2 + 1,
+                                _range_put_column_lower.data_type, _range_index * 2 + 2, _range_put_column_upper.data_type;
+                END IF;
+
+                _range_type := sys_syn_dblink.range_from_data_type(_range_put_column_lower.data_type);
+                _range_id := '_range_' || (_range_index+1)::TEXT || '_';
+
+                _put_code_sql.declarations_sql := _put_code_sql.declarations_sql || $$
+        $$ || _range_id || $$lower                  $$ || _range_put_column_lower.data_type || $$;
+        $$ || _range_id || $$lower_next             $$ || _range_put_column_lower.data_type || $$ := null;
+        $$ || _range_id || $$lower_next_change      $$ || _range_put_column_lower.data_type || $$ := null;$$;
+
+                _range_set_lowers_sql := _range_set_lowers_sql || $$
+                        $$ || _range_id || $$lower  := $$ || _range_put_column_lower.value_expression || $$;$$;
+
+                IF _range_index = 0 THEN
+                        _range_set_change_sql := _range_set_change_sql || $$
+                        IF _range_1_lower != _range_1_lower_next THEN$$;
+                ELSE
+                        _range_set_change_sql := _range_set_change_sql || $$
+                        ELSIF $$ || _range_id || $$lower != $$ || _range_id || $$lower_next THEN$$;
+                END IF;
+                _range_set_change_sql := _range_set_change_sql || $$
+                                $$ || _range_id || $$lower_next_change := $$ || _range_id || $$lower_next;$$;
+                FOR _range_index_inner IN _range_index + 1 .. _range_count - 1 LOOP
+                        _range_set_change_sql := _range_set_change_sql || $$
+                                _range_$$ || (_range_index_inner+1)::TEXT || $$_lower_next_change := null;$$;
+                END LOOP;
+
+                _range_columns_sql := _range_columns_sql || $$,
+                                $$ || _range_put_column_lower.column_name;
+
+                _range_values_sql := _range_values_sql || $$,
+                                $$ || _range_type || $$($$ || _range_id || $$lower, COALESCE($$ ||
+                        _range_put_column_upper.value_expression || $$, $$ || _range_id || $$lower_next_change))$$;
+
+                _range_set_next_sql := _range_set_next_sql || $$
+                        $$ || _range_id || $$lower_next := $$ || _range_id || $$lower;$$;
+        END LOOP;
+
+        _put_code_sql.logic_sql := $$
+        DELETE FROM $$||_table_name_sql||$$ AS out_table
+        WHERE   $$||sys_syn_dblink.put_columns_format(_columns_id,
+        'out_table.%COLUMN_NAME% = %VALUE_EXPRESSION%', ' AND
+                ')||$$;
+
+        IF delta_type != 'Delete'::sys_syn_dblink.delta_type THEN
+                FOR _array_index IN REVERSE array_length(attributes, 1) .. 1 LOOP
+                        attribute_rows  := attributes[_array_index];$$||_range_set_lowers_sql||$$
+$$||_range_set_change_sql||$$
+                        END IF;
+
+                        INSERT INTO $$||_table_name_sql||$$ AS out_table (
+                                $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME%', ',
+                                ')||_range_columns_sql||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                                %COLUMN_NAME%', '')||$$)
+                        VALUES ($$||sys_syn_dblink.put_columns_format(_columns_id, '%VALUE_EXPRESSION%', ',
+                                ')||_range_values_sql||sys_syn_dblink.put_columns_format(_columns_unordered, ',
+                                %VALUE_EXPRESSION%', '')||$$);
+$$||_range_set_next_sql||$$
+                END LOOP;
+        END IF;$$;
+
+        RETURN _put_code_sql;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+COMMENT ON FUNCTION sys_syn_dblink.put_sql_range_array(text, text, sys_syn_dblink.create_put_column[], text, text, text, text,
+        hstore) IS '';
 
 -- end
 

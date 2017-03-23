@@ -138,8 +138,8 @@ FROM    processor_data.test_table_array_processing_1
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |                                                   attributes                                                    | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-----------------------------------------------------------------------------------------------------------------+---------
-          36 | Delete     |                |              |                         |                      |                        | (1) | {"(,)"}                                                                                                         | 
-          36 | Change     |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v3\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v3\")"} | 
+          38 | Delete     |                |              |                         |                      |                        | (1) | {"(,)"}                                                                                                         | 
+          38 | Change     |                |              |                         |                      |                        | (2) | {"(\"Sat Jan 01 19:04:05 2011 PST\",\"test_data2 v3\")","(\"Sun Jan 01 19:04:05 2012 PST\",\"test_data2 v3\")"} | 
 (2 rows)
 
 SELECT * FROM processor_data.test_table_array_process_1();

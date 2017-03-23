@@ -136,8 +136,8 @@ FROM    processor_data.test_table_processing_1
 ORDER BY id, attributes;
  trans_id_in | delta_type | queue_priority | hold_updated | prior_hold_reason_count | prior_hold_reason_id | prior_hold_reason_text | id  |    attributes     | no_diff 
 -------------+------------+----------------+--------------+-------------------------+----------------------+------------------------+-----+-------------------+---------
-          35 | Delete     |                |              |                         |                      |                        | (1) | ()                | 
-          35 | Change     |                |              |                         |                      |                        | (2) | ("test_data-b 2") | 
+          37 | Delete     |                |              |                         |                      |                        | (1) | ()                | 
+          37 | Change     |                |              |                         |                      |                        | (2) | ("test_data-b 2") | 
 (2 rows)
 
 SELECT * FROM processor_data.test_table_process_1();

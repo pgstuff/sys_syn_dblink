@@ -303,6 +303,7 @@ SELECT  dblink_exec('sys_syn_test', 'COMMIT');
 
 A boolean is returned.  False indicates that there are no records to claim and that the following steps do not need to be run at this time.  True indicates that the following steps are ready to run.
 
+If you receive `ERROR:  unrecognized configuration parameter "sys_syn.trans_id_curr"`, then you have not restarted your session since you installed `sys_syn_dblink`.  Close the database session, rerun `dblink_connect`, and rerun the above.
 
 
 ===== Pull the Records
@@ -345,6 +346,13 @@ SELECT * FROM processor_data.test_table_push_status_1();
 ----
 
 A boolean is returned.  False indicates that there are no statuses to push.  True indicates that the statuses were pushed and that the queue was updated.
+
+The `sys_syn` `processed` function should be called after this to complete the entire process.  You can call it via `dblink` with:
+
+[source,sql]
+----
+SELECT * FROM dblink('sys_syn_test', 'SELECT user_data.test_table_out_processed_1()') AS processed(processed boolean);
+----
 
 
 
@@ -491,6 +499,21 @@ delta_types::
     Specify the delta types that this expression runs under.
 comments::
     If you want to add comments about this rule in this table, add them in this column.
+
+
+
+===== table_type_id
+
+Different object patterns / models can be selected by specifying a `table_type_id`.
+
+sys_syn-bitemporal::
+    Attributes can be queried by transaction time and actual/valid time.  `array_order` 1 is the transaction time and `array_order` 2 and 3 specify the actual/valid range.
+sys_syn-direct::
+    Stores the attributes as a row.  This is the default.
+sys_syn-range::
+    Attributes can be queried by 1 or more ranges.  The `array_order` must be set in pairs, starting with 1 and 2.  The first is the range's lower bound and the second is the range's upper bound.  If the upper bound is `NULL`, the next lower bound's value is substituted for the `NULL`.
+sys_syn-temporal::
+    Attributes can be queried by transaction time.  `array_order` 1 is the transaction time.
 
 
 

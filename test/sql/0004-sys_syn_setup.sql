@@ -323,3 +323,60 @@ SELECT user_data.test_table_part_out_move_3();
 SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_1;
 SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_2;
 SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_3;
+
+
+
+CREATE TABLE user_data.test_table_range (
+        test_table_range_id integer NOT NULL,
+        test_table_range_time_start timestamp with time zone NOT NULL,
+        test_table_range_time_end timestamp with time zone,
+        test_table_range_date_start date NOT NULL,
+        test_table_range_date_end date,
+        test_table_range_int_start smallint NOT NULL,
+        test_table_range_int_end smallint,
+        test_table_range_text text,
+        CONSTRAINT test_table_range_pid PRIMARY KEY (test_table_range_id, test_table_range_time_start, test_table_range_date_start, test_table_range_int_start));
+
+SELECT sys_syn.in_table_create (
+                'user_data',
+                'test_table_range',
+                'in',
+                NULL,
+                ARRAY[
+                       $COL$("test_table_range_id","integer",Id,"in_source.test_table_range_id",,,,,)$COL$,
+                       $COL$("test_table_range_time_start","timestamp with time zone",Attribute,"in_source.test_table_range_time_start",1,,,,)$COL$,
+                       $COL$("test_table_range_time_end","timestamp with time zone",Attribute,"in_source.test_table_range_time_end",2,,,,)$COL$,
+                       $COL$("test_table_range_date_start","date",Attribute,"in_source.test_table_range_date_start",3,,,,)$COL$,
+                       $COL$("test_table_range_date_end","date",Attribute,"in_source.test_table_range_date_end",4,,,,)$COL$,
+                       $COL$("test_table_range_int_start","smallint",Attribute,"in_source.test_table_range_int_start",5,,,,)$COL$,
+                       $COL$("test_table_range_int_end","smallint",Attribute,"in_source.test_table_range_int_end",6,,,,)$COL$,
+                       $COL$("test_table_range_text","text",Attribute,"in_source.test_table_range_text",,,,,)$COL$
+                ]::sys_syn.create_in_column[],
+                'user_data.test_table_range',
+                NULL
+        );
+
+INSERT INTO user_data.test_table_range(
+        test_table_range_id, test_table_range_time_start, test_table_range_time_end, test_table_range_date_start, test_table_range_date_end, test_table_range_int_start, test_table_range_int_end, test_table_range_text)
+VALUES  (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-01'::DATE, null,                   1, 2,   'Test 1'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-02'::DATE, null,                   1, 2,   'Test 2'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     1, 2,   'Test 3'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     2, null,'Test 4'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     3, 4,   'Test 5'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-01'::DATE, null,                   1, 2,   'Test 6'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-02'::DATE, null,                   1, null,'Test 7'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     1, null,'Test 8'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     2, null,'Test 9'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     3, null,'Test 10'),
+        (1,     '2003-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-01'::DATE, null,                   1, null,'Test 11'),
+        (1,     '2003-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-02'::DATE, null,                   1, 2,   'Test 12'),
+        (1,     '2003-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     1, 2,   'Test 13');
+
+
+
+SELECT sys_syn.out_table_create('user_data', 'test_table_range', 'out', data_view => TRUE);
+
+SELECT user_data.test_table_range_pull(FALSE);
+SELECT user_data.test_table_range_out_move_1();
+
+SELECT * FROM user_data.test_table_range_out_queue_data_1;

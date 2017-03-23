@@ -120,6 +120,7 @@ SELECT sys_syn.in_table_create_sql('"User Data"."Test Table"'::regclass, 'In Gro
                  full_post_sql           => NULL,                                                          +
                  changes_post_sql        => NULL,                                                          +
                  enable_deletes_implied  => 'true',                                                        +
+                 null_key_handler        => 'none'::sys_syn.null_key_handler,                              +
                  key_violation_handler   => 'none'::sys_syn.key_violation_handler,                         +
                  full_prepull_id         => NULL,                                                          +
                  changes_prepull_id      => NULL,                                                          +
@@ -516,4 +517,88 @@ SELECT id, delta_type, queue_state FROM user_data.test_table_part_out_queue_3;
  (3) | Add        | Unclaimed
  (6) | Add        | Unclaimed
 (3 rows)
+
+CREATE TABLE user_data.test_table_range (
+        test_table_range_id integer NOT NULL,
+        test_table_range_time_start timestamp with time zone NOT NULL,
+        test_table_range_time_end timestamp with time zone,
+        test_table_range_date_start date NOT NULL,
+        test_table_range_date_end date,
+        test_table_range_int_start smallint NOT NULL,
+        test_table_range_int_end smallint,
+        test_table_range_text text,
+        CONSTRAINT test_table_range_pid PRIMARY KEY (test_table_range_id, test_table_range_time_start, test_table_range_date_start, test_table_range_int_start));
+SELECT sys_syn.in_table_create (
+                'user_data',
+                'test_table_range',
+                'in',
+                NULL,
+                ARRAY[
+                       $COL$("test_table_range_id","integer",Id,"in_source.test_table_range_id",,,,,)$COL$,
+                       $COL$("test_table_range_time_start","timestamp with time zone",Attribute,"in_source.test_table_range_time_start",1,,,,)$COL$,
+                       $COL$("test_table_range_time_end","timestamp with time zone",Attribute,"in_source.test_table_range_time_end",2,,,,)$COL$,
+                       $COL$("test_table_range_date_start","date",Attribute,"in_source.test_table_range_date_start",3,,,,)$COL$,
+                       $COL$("test_table_range_date_end","date",Attribute,"in_source.test_table_range_date_end",4,,,,)$COL$,
+                       $COL$("test_table_range_int_start","smallint",Attribute,"in_source.test_table_range_int_start",5,,,,)$COL$,
+                       $COL$("test_table_range_int_end","smallint",Attribute,"in_source.test_table_range_int_end",6,,,,)$COL$,
+                       $COL$("test_table_range_text","text",Attribute,"in_source.test_table_range_text",,,,,)$COL$
+                ]::sys_syn.create_in_column[],
+                'user_data.test_table_range',
+                NULL
+        );
+ in_table_create 
+-----------------
+ 
+(1 row)
+
+INSERT INTO user_data.test_table_range(
+        test_table_range_id, test_table_range_time_start, test_table_range_time_end, test_table_range_date_start, test_table_range_date_end, test_table_range_int_start, test_table_range_int_end, test_table_range_text)
+VALUES  (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-01'::DATE, null,                   1, 2,   'Test 1'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-02'::DATE, null,                   1, 2,   'Test 2'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     1, 2,   'Test 3'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     2, null,'Test 4'),
+        (1,     '2001-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     3, 4,   'Test 5'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-01'::DATE, null,                   1, 2,   'Test 6'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-02'::DATE, null,                   1, null,'Test 7'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     1, null,'Test 8'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     2, null,'Test 9'),
+        (1,     '2002-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     3, null,'Test 10'),
+        (1,     '2003-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-01'::DATE, null,                   1, null,'Test 11'),
+        (1,     '2003-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-02'::DATE, null,                   1, 2,   'Test 12'),
+        (1,     '2003-01-01 12:34:51.00000-00'::timestamp with time zone, null, '2000-01-03'::DATE, '2000-01-04'::DATE,     1, 2,   'Test 13');
+SELECT sys_syn.out_table_create('user_data', 'test_table_range', 'out', data_view => TRUE);
+ out_table_create 
+------------------
+ 
+(1 row)
+
+SELECT user_data.test_table_range_pull(FALSE);
+ test_table_range_pull 
+-----------------------
+ t
+(1 row)
+
+SELECT user_data.test_table_range_out_move_1();
+ test_table_range_out_move_1 
+-----------------------------
+ t
+(1 row)
+
+SELECT * FROM user_data.test_table_range_out_queue_data_1;
+ sys_syn_id | sys_syn_trans_id_in | sys_syn_delta_type | sys_syn_queue_state | sys_syn_queue_id | sys_syn_queue_priority | sys_syn_hold_updated | sys_syn_hold_trans_id_first | sys_syn_hold_trans_id_last | sys_syn_hold_reason_count | sys_syn_hold_reason_id | sys_syn_hold_reason_text | sys_syn_trans_id_out | sys_syn_processed_time | sys_syn_attribute_array_ordinal | test_table_range_id | test_table_range_time_start  | test_table_range_time_end | test_table_range_date_start | test_table_range_date_end | test_table_range_int_start | test_table_range_int_end | test_table_range_text 
+------------+---------------------+--------------------+---------------------+------------------+------------------------+----------------------+-----------------------------+----------------------------+---------------------------+------------------------+--------------------------+----------------------+------------------------+---------------------------------+---------------------+------------------------------+---------------------------+-----------------------------+---------------------------+----------------------------+--------------------------+-----------------------
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               1 |                   1 | Mon Jan 01 04:34:51 2001 PST |                           | 01-01-2000                  |                           |                          1 |                        2 | Test 1
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               2 |                   1 | Mon Jan 01 04:34:51 2001 PST |                           | 01-02-2000                  |                           |                          1 |                        2 | Test 2
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               3 |                   1 | Mon Jan 01 04:34:51 2001 PST |                           | 01-03-2000                  | 01-04-2000                |                          1 |                        2 | Test 3
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               4 |                   1 | Mon Jan 01 04:34:51 2001 PST |                           | 01-03-2000                  | 01-04-2000                |                          2 |                          | Test 4
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               5 |                   1 | Mon Jan 01 04:34:51 2001 PST |                           | 01-03-2000                  | 01-04-2000                |                          3 |                        4 | Test 5
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               6 |                   1 | Tue Jan 01 04:34:51 2002 PST |                           | 01-01-2000                  |                           |                          1 |                        2 | Test 6
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               7 |                   1 | Tue Jan 01 04:34:51 2002 PST |                           | 01-02-2000                  |                           |                          1 |                          | Test 7
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               8 |                   1 | Tue Jan 01 04:34:51 2002 PST |                           | 01-03-2000                  | 01-04-2000                |                          1 |                          | Test 8
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                               9 |                   1 | Tue Jan 01 04:34:51 2002 PST |                           | 01-03-2000                  | 01-04-2000                |                          2 |                          | Test 9
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                              10 |                   1 | Tue Jan 01 04:34:51 2002 PST |                           | 01-03-2000                  | 01-04-2000                |                          3 |                          | Test 10
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                              11 |                   1 | Wed Jan 01 04:34:51 2003 PST |                           | 01-01-2000                  |                           |                          1 |                          | Test 11
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                              12 |                   1 | Wed Jan 01 04:34:51 2003 PST |                           | 01-02-2000                  |                           |                          1 |                        2 | Test 12
+ (1)        |                  21 | Add                | Unclaimed           |                  |                        |                      |                             |                            |                           |                        |                          |                      |                        |                              13 |                   1 | Wed Jan 01 04:34:51 2003 PST |                           | 01-03-2000                  | 01-04-2000                |                          1 |                        2 | Test 13
+(13 rows)
 
