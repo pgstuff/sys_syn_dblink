@@ -1,0 +1,28 @@
+diff --git a/Makefile b/Makefile
+index 1e6a99c..2613c01 100644
+--- a/Makefile
++++ b/Makefile
+@@ -14,7 +14,7 @@ DOCS = README.md
+ REGRESS = install no_system_period invalid_system_period \
+           no_history_table no_history_system_period invalid_types \
+           invalid_system_period_values \
+-          versioning versioning_custom_system_time combinations \
++          versioning versioning_custom_system_time \
+           structure uninstall
+ 
+ PG_CONFIG = pg_config
+diff --git a/versioning.c b/versioning.c
+index a8b5ff2..1ec5476 100644
+--- a/versioning.c
++++ b/versioning.c
+@@ -1009,10 +1009,6 @@ versioning_delete(TriggerData *trigdata,
+ 
+ 	tuple = trigdata->tg_trigtuple;
+ 
+-	/* Ignore tuples modified in this transaction. */
+-	if (modified_in_current_transaction(tuple))
+-		return PointerGetDatum(tuple);
+-
+ 	relation = trigdata->tg_relation;
+ 
+ 	deserialize_system_period(tuple, relation, period_attnum, period_attname,

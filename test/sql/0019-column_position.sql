@@ -6,7 +6,8 @@ CREATE SCHEMA processor_data
         AUTHORIZATION postgres;
 
 SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
-        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)) ||
+        'port=' || current_setting('port'));
 SELECT dblink_exec('sys_syn_test', 'BEGIN');
 
 INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'in');

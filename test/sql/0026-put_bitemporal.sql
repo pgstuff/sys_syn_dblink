@@ -20,7 +20,8 @@ CREATE SCHEMA put_data
         AUTHORIZATION postgres;
 
 SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
-        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)) ||
+        'port=' || current_setting('port'));
 SELECT dblink_exec('sys_syn_test', 'BEGIN');
 
 INSERT INTO sys_syn_dblink.in_groups_def VALUES ('sys_syn_dblink-test', 'in');
@@ -52,6 +53,10 @@ ORDER BY test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bit
 
 SELECT  test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bitemporal_start, test_table_bitemporal_text
 FROM    put_data.test_table_bitemporal_history
+ORDER BY test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bitemporal_start, test_table_bitemporal_text;
+
+SELECT  test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bitemporal_start, test_table_bitemporal_text
+FROM ONLY put_data.test_table_bitemporal_history
 ORDER BY test_table_bitemporal_id, test_table_bitemporal_updated, test_table_bitemporal_start, test_table_bitemporal_text;
 
 SELECT  test_table_bitemporal_id

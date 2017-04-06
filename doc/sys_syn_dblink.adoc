@@ -93,13 +93,13 @@ Usage requirements:
 - The `hstore` PostgreSQL extension.
 - The `dblink` PostgreSQL extension.
 - The `sys_syn` PostgreSQL extension installed and used on the database that you are connecting to.  This is not required for the database that needs sys_syn_dblink installed on it.
-- The `temporal_tables` PostgreSQL extension if you use the temporal or bitemporal table_types.
+- The `temporal_tables` v1.1.0 (or patched) PostgreSQL extension if you use the temporal or bitemporal table_types.
 
 Test requirements:
 
 - The `tinyint` PostgreSQL extension.
 - The `sys_syn` PostgreSQL extension.
-- The `temporal_tables` PostgreSQL extension.
+- The `temporal_tables` v1.1.0 (or patched) PostgreSQL extension.
 
 Documentation requirements:
 
@@ -507,13 +507,26 @@ comments::
 Different object patterns / models can be selected by specifying a `table_type_id`.
 
 sys_syn-bitemporal::
-    Attributes can be queried by transaction time and actual/valid time.  `array_order` 1 is the transaction time and `array_order` 2 and 3 specify the actual/valid range.
+    Attributes can be queried by transaction time and actual/valid time.  `array_order` 1 is the transaction time and `array_order` 2 and 3 specify the actual/valid range.  Requires the `temporal_tables` v1.1.0 (or patched) and `btree_gist` extensions.
 sys_syn-direct::
     Stores the attributes as a row.  This is the default.
 sys_syn-range::
-    Attributes can be queried by 1 or more ranges.  The `array_order` must be set in pairs, starting with 1 and 2.  The first is the range's lower bound and the second is the range's upper bound.  If the upper bound is `NULL`, the next lower bound's value is substituted for the `NULL`.
+    Attributes can be queried by 1 or more ranges.  The `array_order` must be set in pairs, starting with 1 and 2.  The first is the range's lower bound and the second is the range's upper bound.  If the upper bound is `NULL`, the next lower bound's value is substituted for the `NULL`.  Requires the `btree_gist` extension.
 sys_syn-temporal::
-    Attributes can be queried by transaction time.  `array_order` 1 is the transaction time.
+    Attributes can be queried by transaction time.  `array_order` 1 is the transaction time.  Requires the `temporal_tables` v1.1.0 (or patched) and `btree_gist` extensions.
+
+
+
+===== Applying the `temporal_tables` Patch
+
+This patch allows multiple updates to an object per transaction to be recorded in the history table.
+
+Before building the `temporal_tables` extension, run this:
+
+[source,shell]
+----
+patch -i ../sys_syn_dblink/patches/temporal_tables-sys_syn_dblink.patch
+----
 
 
 

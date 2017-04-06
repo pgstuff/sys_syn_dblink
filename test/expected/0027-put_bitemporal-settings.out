@@ -24,7 +24,8 @@ CREATE SCHEMA processor_data
 CREATE SCHEMA put_data
         AUTHORIZATION postgres;
 SELECT  dblink_connect('sys_syn_test', 'dbname=contrib_regression host=' ||
-        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)));
+        quote_literal(split_part((SELECT pg_settings.setting FROM pg_settings WHERE pg_settings.name = 'unix_socket_directories'), ', ', 1)) ||
+        'port=' || current_setting('port'));
  dblink_connect 
 ----------------
  OK
@@ -113,6 +114,17 @@ ORDER BY test_table_bitemporal_id, trans_period, valid_period, test_table_bitemp
                         5 | ["Tue Jan 01 19:04:05 2013 PST","Wed Jan 01 19:04:05 2014 PST") | [03-01-2009,)           | test_data5 v3 forward period_2 change
                         5 | ["Wed Jan 01 19:04:05 2014 PST",)                               | [02-01-2009,)           | test_data5 v4 backdate period_2 change
 (11 rows)
+
+SELECT  test_table_bitemporal_id, trans_period, valid_period, test_table_bitemporal_text
+FROM ONLY put_data.test_table_bitemporal_history
+ORDER BY test_table_bitemporal_id, trans_period, valid_period, test_table_bitemporal_text;
+ test_table_bitemporal_id |                          trans_period                           | valid_period  |      test_table_bitemporal_text       
+--------------------------+-----------------------------------------------------------------+---------------+---------------------------------------
+                        3 | ["Sat Jan 01 19:04:05 2011 PST","Sun Jan 01 19:04:05 2012 PST") | [01-01-2009,) | test_data3 v1 original
+                        4 | ["Sat Jan 01 19:04:05 2011 PST","Sun Jan 01 19:04:05 2012 PST") | [01-01-2009,) | test_data4 v1 original
+                        5 | ["Sat Jan 01 19:04:05 2011 PST","Sun Jan 01 19:04:05 2012 PST") | [01-01-2009,) | test_data5 v1 original
+                        5 | ["Tue Jan 01 19:04:05 2013 PST","Wed Jan 01 19:04:05 2014 PST") | [03-01-2009,) | test_data5 v3 forward period_2 change
+(4 rows)
 
 SELECT  test_table_bitemporal_id
 FROM    put_data.test_table_bitemporal_immutable

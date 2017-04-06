@@ -164,6 +164,7 @@ CREATE UNIQUE INDEX ON sys_syn_dblink.put_table_transforms (
         priority, proc_table_id_like, cluster_id_like, in_table_id_like, out_group_id_like, in_group_id_like, proc_schema_like,
         put_schema_like, put_table_name_like, table_type_id_like, attributes_array, dblink_connname_like, remote_schema_like/*,
         queue_id*/);
+CREATE INDEX ON sys_syn_dblink.put_table_transforms (rule_group_id);
 
 CREATE TABLE sys_syn_dblink.put_column_transforms (
         rule_group_id           text,
@@ -212,6 +213,7 @@ CREATE UNIQUE INDEX ON sys_syn_dblink.put_column_transforms (
         priority, proc_table_id_like, cluster_id_like, out_group_id_like, in_group_id_like, proc_schema_like, put_schema_like,
         put_table_name_like, table_type_id_like, attributes_array, dblink_connname_like, remote_schema_like, /*queue_id,*/
         in_column_type, column_name_like, data_type_like);
+CREATE INDEX ON sys_syn_dblink.put_column_transforms (rule_group_id);
 
 CREATE TABLE sys_syn_dblink.proc_tables_def (
         proc_schema             regnamespace    NOT NULL,
@@ -1575,6 +1577,43 @@ BEGIN
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_proc_table_def.proc_table_id||'_processing') || ' (
+        id ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
+        trans_id_in             integer NOT NULL,
+        delta_type              sys_syn_dblink.delta_type NOT NULL,
+        queue_priority          smallint,
+        hold_updated            boolean,
+        prior_hold_reason_count integer,
+        prior_hold_reason_id    integer,
+        prior_hold_reason_text  text,
+        attributes ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_attributes_name) ||
+        CASE WHEN _proc_table_def.attributes_array THEN '[]' ELSE '' END || ',
+        no_diff ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_no_diff_name) || ',
+        CONSTRAINT ' || quote_ident(_proc_table_def.proc_table_id||'_proc_pkey') || ' PRIMARY KEY (id)
+)';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_proc_table_def.proc_table_id||'_processed') || ' (
+        id ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
+        hold_reason_id          integer,
+        hold_reason_text        text,
+        queue_priority          smallint,
+        processed_time          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ' || quote_ident(_proc_table_def.proc_table_id||'_processed_pkey') || ' PRIMARY KEY (id)
+)';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'CREATE TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_proc_table_def.proc_table_id||'_queue_status') || ' (
+        queue_id smallint DEFAULT NULL
+)';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
         FOR     _proc_worker_def IN
         SELECT  *
         FROM    sys_syn_dblink.proc_workers_def
@@ -1683,6 +1722,7 @@ CREATE FUNCTION sys_syn_dblink.proc_table_create_worker (
 $BODY$
 DECLARE
         _proc_table_def         sys_syn_dblink.proc_tables_def;
+        _proc_worker_def        sys_syn_dblink.proc_workers_def;
         _object_id              TEXT;
         _worker_suffix          TEXT;
         _type_id_name           TEXT;
@@ -1695,6 +1735,12 @@ BEGIN
                 FROM    sys_syn_dblink.proc_tables_def
                 WHERE   proc_tables_def.proc_table_id = proc_table_create_worker.proc_table_id);
 
+        _proc_worker_def := (
+                SELECT  proc_workers_def
+                FROM    sys_syn_dblink.proc_workers_def
+                WHERE   proc_workers_def.proc_table_id  = _proc_table_def.proc_table_id AND
+                        proc_workers_def.worker_id      = proc_table_create_worker.worker_id);
+
         _object_id              := _proc_table_def.proc_table_id;
         _worker_suffix          := '_' || worker_id;
         _type_id_name           := _proc_table_def.proc_table_id||'_proc_id';
@@ -1702,38 +1748,35 @@ BEGIN
         _type_no_diff_name      := _proc_table_def.proc_table_id||'_proc_no_diff';
 
         _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
-                quote_ident(_object_id||'_processing'||_worker_suffix) || ' (
-        id ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
-        trans_id_in             integer NOT NULL,
-        delta_type              sys_syn_dblink.delta_type NOT NULL,
-        queue_priority          smallint,
-        hold_updated            boolean,
-        prior_hold_reason_count integer,
-        prior_hold_reason_id    integer,
-        prior_hold_reason_text  text,
-        attributes ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_attributes_name) ||
-        CASE WHEN _proc_table_def.attributes_array THEN '[]' ELSE '' END || ',
-        no_diff ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_no_diff_name) || ',
-        CONSTRAINT ' || quote_ident(_object_id||'_proc_pkey'||_worker_suffix) || ' PRIMARY KEY (id)
-)';
+                quote_ident(_object_id||'_processing'||_worker_suffix) || ' ()
+INHERITS (' || _proc_table_def.proc_schema || '.' || quote_ident(_object_id||'_processing') || ')' || COALESCE('
+TABLESPACE ' || quote_ident(_proc_worker_def.unlogged_tablespace), '');
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'ALTER TABLE ONLY ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_processing'||_worker_suffix) || '
+        ADD CONSTRAINT ' || quote_ident(_object_id||'_processing'||_worker_suffix||'_pkey') || ' PRIMARY KEY (id);';
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
         _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
-                quote_ident(_object_id||'_processed'||_worker_suffix) || ' (
-        id ' || _proc_table_def.proc_schema || '.' || quote_ident(_type_id_name) || ' NOT NULL,
-        hold_reason_id          integer,
-        hold_reason_text        text,
-        queue_priority          smallint,
-        processed_time          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT ' || quote_ident(_object_id||'_processed_pkey'||_worker_suffix) || ' PRIMARY KEY (id)
-)';
+                quote_ident(_object_id||'_processed'||_worker_suffix) || ' ()
+INHERITS (' || _proc_table_def.proc_schema || '.' || quote_ident(_object_id||'_processed') || ')' || COALESCE('
+TABLESPACE ' || quote_ident(_proc_worker_def.unlogged_tablespace), '');
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
-        _sql_buffer := 'CREATE TABLE ' || _proc_table_def.proc_schema || '.' ||
-                quote_ident(_object_id||'_queue_status'||_worker_suffix) || ' (
-        queue_id smallint DEFAULT NULL)';
+        _sql_buffer := 'ALTER TABLE ONLY ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_processed'||_worker_suffix) || '
+        ADD CONSTRAINT ' || quote_ident(_object_id||'_processed'||_worker_suffix||'_pkey') || ' PRIMARY KEY (id);';
+        RAISE DEBUG '%', _sql_buffer;
+        EXECUTE _sql_buffer;
+
+        _sql_buffer := 'CREATE UNLOGGED TABLE ' || _proc_table_def.proc_schema || '.' ||
+                quote_ident(_object_id||'_queue_status'||_worker_suffix) || ' ()
+INHERITS (' || _proc_table_def.proc_schema || '.' || quote_ident(_object_id||'_queue_status') || ')' || COALESCE('
+TABLESPACE ' || quote_ident(_proc_worker_def.logged_tablespace), '');
         RAISE DEBUG '%', _sql_buffer;
         EXECUTE _sql_buffer;
 
@@ -3023,7 +3066,7 @@ BEGIN
                         FROM    unnest(_columns_orderby)
                 );
         IF (_range_count % 2) != 0 THEN
-                RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  The max array_order must be an even number.';
+                RAISE EXCEPTION 'sys_syn_dblink.table_create_sql_range_array:  The max array_order must be an even number.';
         END IF;
         _range_count := _range_count / 2;
 
@@ -3035,7 +3078,7 @@ BEGIN
                         END IF;
                 END LOOP;
                 IF _range_put_column_lower IS NULL THEN
-                        RAISE EXCEPTION 'sys_syn_dblink.put_sql_range_array:  Cannot find lower range %, array_order %',
+                        RAISE EXCEPTION 'sys_syn_dblink.table_create_sql_range_array:  Cannot find lower range %, array_order %',
                                 _range_index + 1, _range_index * 2 + 1;
                 END IF;
 
@@ -3051,7 +3094,7 @@ BEGIN
         $$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% %FORMAT_TYPE% NOT NULL', ',
         ')||_columns_orderby_sql||sys_syn_dblink.put_columns_format(_columns_unordered, ',
         %COLUMN_NAME% %FORMAT_TYPE%', '')||$$,
-        CONSTRAINT test_table_range_overlap EXCLUDE
+        CONSTRAINT $$||quote_ident(table_name||'_overlap')||$$ EXCLUDE
         USING gist ($$||sys_syn_dblink.put_columns_format(_columns_id, '%COLUMN_NAME% WITH =', ', ')||_columns_constraint_sql||$$)
 );
 $$;
@@ -3769,6 +3812,11 @@ BEGIN
         LOOP
                 PERFORM sys_syn_dblink.proc_table_drop_worker(proc_table_id, _proc_worker_def.worker_id);
         END LOOP;
+
+        _sql_command_prefix := 'DROP TABLE '|| _proc_table_def.proc_schema::text || '.';
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_queue_status');
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processed');
+        EXECUTE _sql_command_prefix || quote_ident(_object_id||'_processing');
 
         _sql_command_prefix := 'DROP FUNCTION ' || _proc_table_def.proc_schema::text || '.';
         EXECUTE _sql_command_prefix || quote_ident(_object_id||'_put') || '(integer, sys_syn_dblink.delta_type, smallint, boolea' ||
